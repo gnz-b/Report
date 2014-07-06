@@ -1,7 +1,7 @@
 ﻿CREATE OR REPLACE PACKAGE BODY AIAB_ISP_INTERFACE_TABLES_PKG IS
   -- add by zhubin 20140706
   /*
-  以下是需求文档：
+  以下是需求:
   
   Banc Bank Hierarchy
 
@@ -76,6 +76,7 @@
   ACTUAL_CITY_NAME
   
   */
+  -- so good
 
   -- 根据当前POS找到它的上级总行、省分行、市分行、支行、二级支行
   -- 并取得他们的架构各自开始的时间
