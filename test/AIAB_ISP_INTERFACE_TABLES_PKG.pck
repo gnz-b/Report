@@ -1,5 +1,6 @@
 ﻿CREATE OR REPLACE PACKAGE BODY AIAB_ISP_INTERFACE_TABLES_PKG IS
   -- add by zhubin 20140706
+  --add 20140710
   /*
   以下是需求:
   
