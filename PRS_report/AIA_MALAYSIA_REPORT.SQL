@@ -1,4 +1,4 @@
-CREATE OR REPLACE PACKAGE BODY AIA_MALAYSIA_REPORT_PKG IS
+CREATE OR REPLACE PACKAGE BODY AIA_MALAYSIA_REPORT_PKG_z IS
 
   C_REMOVEDATE PERIODDIMENSION.REMOVEDATE%TYPE := TO_DATE('2200-1-1', 'YYYY-MM-DD');
   --C_PERIODTYPE PERIODDIMENSION.PERIODTYPE%TYPE := 'semi-month';
@@ -1732,7 +1732,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_MALAYSIA_REPORT_PKG IS
                                      END = 0),
                                      --20140710 start
                               0) >= 0--50
-                                    --20140710 end 
+                                    --20140710 end
                      -- ALL LOB's Beginning Balance + all LOB's Comm  >= 50
                       THEN
                       NVL(AAS.BEGINING_BALANCE, 0) +
@@ -1780,7 +1780,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_MALAYSIA_REPORT_PKG IS
                                         0
                                      END = 0),
                                      --20140710 start
-                              0) < 0-- 50 
+                              0) < 0-- 50
                                      --20140710 end
                               THEN
                      -- ALL LOB's Beginning Balance + all LOB's Comm  < 50
@@ -1905,7 +1905,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_MALAYSIA_REPORT_PKG IS
                  /*AND T.LOB = AAS.LOB*/
                  ),
                    --20140710 start
-                 0) < 0--50 
+                 0) < 0--50
                    --20140710 end
                  THEN
         -- ALL LOB's Beginning Balance + all LOB's Comm  < 50
@@ -2201,19 +2201,19 @@ CREATE OR REPLACE PACKAGE BODY AIA_MALAYSIA_REPORT_PKG IS
    normal terminate:
           (1) Terminated:Resignation
           (2) Terminated:Termination
-          
+
           compensation_date <= terminated_date ==> payout
           compensation_date > terminated_date  ==> unpay
    unNormal terminate:
           (1) Terminated:Fraud Case
           (2) Terminated:Mis-Conduct
-          
+
           all ==> unpay
-*/                                    
+*/
          AND CASE
                WHEN (AOSD.STATUS_CODE || ':' || AOSD.STATUS_NAME) IN
                     ('Terminated:Resignation',
-                     'Terminated:Termination') AND 
+                     'Terminated:Termination') AND
                      -- changed by Corey 20140722
                     AOSD.COMPENSATION_DATE <= AOSD.TERMINATIONDATE
                     THEN
@@ -2222,7 +2222,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_MALAYSIA_REPORT_PKG IS
                 1
              END = 0;
 
--- termination logic end , by Corey & Neal 20140722             
+-- termination logic end , by Corey & Neal 20140722
 
     --------MISC
     INSERT INTO AIA_AGT_STMT
@@ -2289,7 +2289,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_MALAYSIA_REPORT_PKG IS
          AND CASE
                WHEN (AOSD.STATUS_CODE || ':' || AOSD.STATUS_NAME) IN
                     ('Terminated:Resignation',
-                     'Terminated:Termination') AND 
+                     'Terminated:Termination') AND
                      -- changed by Corey 20140722
                     AOSD.COMPENSATION_DATE <= AOSD.TERMINATIONDATE
                     THEN
@@ -6555,6 +6555,140 @@ CREATE OR REPLACE PACKAGE BODY AIA_MALAYSIA_REPORT_PKG IS
   END;
 
 --added by zhubin for PRS report on the condition that agent has no payment
+  PROCEDURE GetManager(P_MANAGERSEQ IN NUMBER,
+                       P_PERIODENDDATE IN DATE,
+                       V_MANAGERNAME OUT VARCHAR2,
+                       V_MANAGERCODE OUT VARCHAR2
+                       )
+    is
+    C_REMOVEDATE DATE := TO_DATE('2200-1-1', 'YYYY-MM-DD');
+  begin
+    select posa.name,
+           par.PREFIX || par.FIRSTNAME || par.MIDDLENAME|| par.LASTNAME || par.SUFFIX
+    into
+           V_MANAGERCODE,
+           V_MANAGERNAME
+   from cs_participant  par,
+        cs_position     posa
+   where par.payeeseq = posa.payeeseq
+   and par.removedate = C_REMOVEDATE
+   and posa.removedate = C_REMOVEDATE
+   and par.effectivestartdate <= P_PERIODENDDATE - 1
+   and par.effectiveenddate > P_PERIODENDDATE -1
+   and posa.effectivestartdate <= P_PERIODENDDATE - 1
+   and posa.effectiveenddate > P_PERIODENDDATE - 1
+   and posa.ruleelementownerseq = P_MANAGERSEQ
+   AND ROWNUM = 1;
+  end GetManager;
+
+  PROCEDURE GetAgency(P_AGENTCODE IN Varchar2,
+                                      P_PERIODENDDATE IN DATE,
+                                      V_AGENCYNAME OUT VARCHAR2,
+                                      V_AGENCYCODE OUT VARCHAR2)
+
+  is
+
+   V_TITLE VARCHAR2(255);
+   V_MANAGERSEQ NUMBER;
+   V_FROM_DM NUMBER;
+   -- V_AGENCYNAME VARCHAR2(255);
+   -- V_AGENCYCODE VARCHAR2(255);
+   C_REMOVEDATE DATE := TO_DATE('2200-1-1', 'YYYY-MM-DD');
+  begin
+
+    SELECT T.POSITIONTITLE INTO V_TITLE
+           --T.MANAGERSEQ INTO V_MANAGERSEQ
+    FROM AIA_PAYEE_INFOR T
+    WHERE T.REMOVEDATE > SYSDATE
+    AND T.EFFECTIVESTARTDATE <= P_PERIODENDDATE - 1
+    AND T.EFFECTIVEENDDATE > P_PERIODENDDATE -1
+    AND T.PARTICIPANTID = P_AGENTCODE;
+
+    -- FIND THE FROM_DM FOR ALC
+    IF V_TITLE = 'Tied Agency-ALC' THEN
+      SELECT POSR.CHILDPOSITIONSEQ INTO V_FROM_DM
+      FROM
+             CS_POSITION POS,
+             CS_POSITIONRELATION POSR,
+             CS_POSITIONRELATIONTYPE POSRT
+       WHERE POS.RULEELEMENTOWNERSEQ = POSR.PARENTPOSITIONSEQ
+       AND   POSRT.DATATYPESEQ = POSR.POSITIONRELATIONTYPESEQ
+       AND   POS.REMOVEDATE = C_REMOVEDATE
+       AND   POSR.REMOVEDATE = C_REMOVEDATE
+       AND   POSRT.REMOVEDATE = C_REMOVEDATE
+       AND   POS.EFFECTIVESTARTDATE <= P_PERIODENDDATE - 1
+       AND   POS.EFFECTIVEENDDATE > P_PERIODENDDATE - 1
+       AND   POSR.EFFECTIVESTARTDATE <= P_PERIODENDDATE - 1
+       AND   POSR.EFFECTIVEENDDATE > P_PERIODENDDATE - 1
+       AND   POS.NAME = P_AGENTCODE
+       AND   POSRT.NAME = 'ALC_Roll';
+    END IF;
+
+    IF V_TITLE LIKE '%Tied Agency%' THEN
+    select posa.name ,
+           par.PREFIX || par.FIRSTNAME || par.MIDDLENAME|| par.LASTNAME || par.SUFFIX
+           INTO
+                V_AGENCYCODE,
+                V_AGENCYNAME
+           from cs_participant par,
+                cs_position    posa,
+                aia_payee_infor aas
+           where par.payeeseq = posa.payeeseq
+           and par.removedate = C_REMOVEDATE
+           and posa.removedate = C_REMOVEDATE
+           and par.effectivestartdate <= P_PERIODENDDATE - 1
+           and par.effectiveenddate > P_PERIODENDDATE - 1
+           and posa.effectivestartdate <= P_PERIODENDDATE - 1
+           and posa.effectiveenddate > P_PERIODENDDATE - 1
+           and posa.ruleelementownerseq IN
+           --query the postionseq of unit code
+          (select max(cspr.childpositionseq)
+           from cs_position  csp,
+           cs_positionrelation cspr
+           where cspr.parentpositionseq =
+           csp.ruleelementownerseq
+           and cspr.positionrelationtypeseq =
+             (--query the Assigned_Roll relationSEQ
+              select relt.datatypeseq
+              from cs_positionrelationtype relt
+              where relt.name ='Assigned_Roll'
+              and relt.removedate = C_REMOVEDATE)
+           and csp.removedate = C_REMOVEDATE
+           and cspr.removedate =C_REMOVEDATE
+           and csp.effectivestartdate <= P_PERIODENDDATE - 1
+           and csp.effectiveenddate > P_PERIODENDDATE - 1
+           and cspr.effectivestartdate <= P_PERIODENDDATE - 1
+           and cspr.effectiveenddate > P_PERIODENDDATE - 1
+           and csp.ruleelementownerseq =
+             DECODE(AAS.POSITIONTITLE,
+                    'Tied Agency-Agent',
+                    AAS.MANAGERSEQ,
+                    'Tied Agency-ALC',
+                    V_FROM_DM,
+                    AAS.POSITIONSEQ))
+            and AAS.Removedate = C_REMOVEDATE
+            --and AAS.Positiontitle like '%Tied Agency%'
+            AND AAS.Participantid = P_AGENTCODE;
+            --Result := V_AGENCYCODE||'#_#'||V_AGENCYNAME;
+      END IF;
+
+      IF V_TITLE IN('Broker-Agent',
+                    'Broker-Leader',
+                    'IFA-FA Leader',
+                    'IFA-FAR')  THEN
+        SELECT T.MANAGERSEQ INTO V_MANAGERSEQ
+          FROM AIA_PAYEE_INFOR T
+        WHERE T.PARTICIPANTID = P_AGENTCODE
+        AND T.REMOVEDATE = C_REMOVEDATE
+        AND T.EFFECTIVESTARTDATE <= P_PERIODENDDATE - 1
+        AND T.EFFECTIVEENDDATE > P_PERIODENDDATE - 1;
+
+        GetManager(V_MANAGERSEQ, P_PERIODENDDATE, V_AGENCYNAME, V_AGENCYCODE);
+      END IF;
+
+  end GetAgency;
+
+
   PROCEDURE AIA_PRS_PROC IS
     V_AGENCYCODE VARCHAR2(255);
     V_AGENCYNAME VARCHAR2(255);
@@ -6562,17 +6696,17 @@ CREATE OR REPLACE PACKAGE BODY AIA_MALAYSIA_REPORT_PKG IS
     V_MANAGERNAME VARCHAR2(255);
     V_MANAGERCODE VARCHAR2(255);
     V_RECORD_NO NUMBER;
-    V_MANAGERSEQ NUMBER;
+    --V_MANAGERSEQ NUMBER;
     V_AGENT_RECORD AIA_PAYEE_INFOR%ROWTYPE;
   BEGIN
     --get the max record no. of stmt_total
-    SELECT MAX(T.RECORDNO) INTO V_RECORD_NO  
+    SELECT MAX(T.RECORDNO) INTO V_RECORD_NO
     FROM AIA_AGT_STMT_TOTAL T;
 
     -- find the agent who has prs but not has stmt
     For P_AGENT in (
-      SELECT * FROM AIA_OLD_AGT_STATEMENT_DTL OLD 
-      WHERE OLD.BUSINESS_LINE = 'PRS' 
+      SELECT * FROM AIA_OLD_AGT_STATEMENT_DTL OLD
+      WHERE OLD.BUSINESS_LINE = 'PRS'
       AND OLD.COMPENSATION_DATE >= V_PERIODSTARTDATE
       AND OLD.COMPENSATION_DATE < V_PERIODENDDATE
       AND OLD.PAYEE_ID NOT IN (
@@ -6586,15 +6720,16 @@ CREATE OR REPLACE PACKAGE BODY AIA_MALAYSIA_REPORT_PKG IS
       WHERE T.PARTICIPANTID = P_AGENT.PAYEE_ID
       AND T.REMOVEDATE = C_REMOVEDATE
       AND T.EFFECTIVESTARTDATE <= V_PERIODENDDATE - 1
-      AND T.EFFECTIVEENDDATE > V_PERIODENDDATE - 1
+      AND T.EFFECTIVEENDDATE > V_PERIODENDDATE - 1;
 
-      GetAgency(P_AGENT.PARTICIPANTID, V_PERIODENDDATE, V_AGENCYNAME, V_AGENCYCODE);
+      GetAgency(P_AGENT.PAYEE_ID, V_PERIODENDDATE, V_AGENCYNAME, V_AGENCYCODE);
 
-      GetManager(P_AGENT.PARTICIPANTID, V_PERIODENDDATE, V_MANAGERNAME, V_MANAGERCODE);
+      GetManager(P_AGENT.PAYEE_ID, V_PERIODENDDATE, V_MANAGERNAME, V_MANAGERCODE);
 
-      IF P_AGENT.POSITIONTITLE != 'Tied Agency-DM' THEN
-        V_REPORT_TO = V_MANAGERCODE;
-
+      IF V_AGENT_RECORD.POSITIONTITLE != 'Tied Agency-DM' THEN
+        V_REPORT_TO := V_MANAGERCODE;
+      END IF;
+       
       -- INSERT DATA INTO AIA_AGENT_ID
       INSERT INTO AIA_AGENT_ID
         (RECORDNO,
@@ -6604,14 +6739,14 @@ CREATE OR REPLACE PACKAGE BODY AIA_MALAYSIA_REPORT_PKG IS
          PERIODSTARTDATE,
          PERIODENDDATE,
          PRODUCERCODE,
-         CREATEDATE)
+         CREATE_DATE)
       SELECT V_RECORD_NO,
              V_PERIODKEY,
              V_CALENDARNAME,
              V_PERIODNAME,
              V_PERIODSTARTDATE,
              V_PERIODENDDATE,
-             P_AGENT.PARTICIPANTID,
+             P_AGENT.PAYEE_ID,
              SYSDATE
              FROM DUAL;
 
@@ -6633,24 +6768,24 @@ CREATE OR REPLACE PACKAGE BODY AIA_MALAYSIA_REPORT_PKG IS
          STATUS,
          NAME,
          CODE,
-         CREATEDATE
+         CREATE_DATE
          )
-      SELECT P_AGENT.PAKEY,
+      SELECT V_AGENT_RECORD.PAKEY,
              V_PERIODKEY,
              V_CALENDARNAME,
              V_PERIODNAME,
              V_PERIODSTARTDATE,
              V_PERIODENDDATE,
-             P_AGENT.POSITIONSEQ,
-             P_AGENT.MANAGERSEQ,
-             P_AGENT.POSITIONNAME,
-             P_AGENT.POSITIONTITLE,
+             V_AGENT_RECORD.POSITIONSEQ,
+             V_AGENT_RECORD.MANAGERSEQ,
+             V_AGENT_RECORD.POSITIONNAME,
+             V_AGENT_RECORD.POSITIONTITLE,
              V_REPORT_TO,
              V_AGENCYCODE,
              V_AGENCYNAME,
-             P_AGENT.PRODUCERSTATUS,
-             P_AGENT.LASTNAME,
-             P_AGENT.POSITIONNAME,
+             V_AGENT_RECORD.PRODUCERSTATUS,
+             V_AGENT_RECORD.LASTNAME,
+             V_AGENT_RECORD.POSITIONNAME,
              SYSDATE FROM DUAL;
 
       --insert stmt_total
@@ -6677,21 +6812,21 @@ CREATE OR REPLACE PACKAGE BODY AIA_MALAYSIA_REPORT_PKG IS
          RENEWAL_YTD,
          MISC_YTD,
          TOTAL_YTD,
-         CREATEDATE)
+         CREATE_DATE)
       SELECT V_RECORD_NO,
-             P_AGENT.PAKEY,
+             V_AGENT_RECORD.PAKEY,
              V_PERIODKEY,
              V_CALENDARNAME,
              V_PERIODNAME,
              V_PERIODSTARTDATE,
              V_PERIODENDDATE,
-             P_AGENT.POSITIONSEQ,
-             P_AGENT.MANAGERSEQ,
-             P_AGENT.POSITIONNAME,
-             P_AGENT.POSITIONTITLE,
-             P_AGENT.PRODUCERSTATUS,
-             P_AGENT.LASTNAME,
-             P_AGENT.POSITIONNAME,
+             V_AGENT_RECORD.POSITIONSEQ,
+             V_AGENT_RECORD.MANAGERSEQ,
+             V_AGENT_RECORD.POSITIONNAME,
+             V_AGENT_RECORD.POSITIONTITLE,
+             V_AGENT_RECORD.PRODUCERSTATUS,
+             V_AGENT_RECORD.LASTNAME,
+             V_AGENT_RECORD.POSITIONNAME,
              0,
              0,
              0,
@@ -6703,7 +6838,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_MALAYSIA_REPORT_PKG IS
              SYSDATE FROM DUAL;
     END LOOP;
   END;
---added by zhubin 
+--added by zhubin
 
   PROCEDURE AIA_MALAYSIA_REPORT_PROC IS
   BEGIN
