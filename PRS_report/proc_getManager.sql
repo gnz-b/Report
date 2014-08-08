@@ -1,7 +1,7 @@
-PROCEDURE z(P_MANAGERSEQ IN NUMBER, 
+PROCEDURE GetManager(P_MANAGERSEQ IN NUMBER, 
                      P_PERIODENDDATE IN DATE,
-                     V_MANAGERNAME VARCHAR2(255),
-                     V_MANAGERCODE VARCHAR2(255)
+                     V_MANAGERNAME OUT VARCHAR2,
+                     V_MANAGERCODE OUT VARCHAR2
                      ) 
   is
   C_REMOVEDATE DATE := TO_DATE('2200-1-1', 'YYYY-MM-DD');
