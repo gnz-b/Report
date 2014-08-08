@@ -234,7 +234,11 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                                    AND PAY.REMOVEDATE = C_REMOVEDATE
                                    AND TIT.REMOVEDATE = C_REMOVEDATE
                                    AND TIT.ISLAST = 1
-                                   AND UPPER(TIT.NAME) LIKE '%DISTRICT'
+                                   --Modified by zhubin 20140808 temp 
+                                   --AND UPPER(TIT.NAME) LIKE '%DISTRICT'
+                                   AND (UPPER(TIT.NAME) LIKE '%AGENCY' OR
+                                       UPPER(TIT.NAME) LIKE '%DISTRICT')
+                                   --Modified by zhubin
                                    AND PAY.BUSINESSUNITMAP = BUS.MASK
                                    AND POS.PAYEESEQ = PAY.PAYEESEQ
                                    AND POS.TITLESEQ = TIT.RULEELEMENTOWNERSEQ
@@ -3562,6 +3566,9 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
        DISSOLVED_AGENCY_DATE,
        ------Contribute Agent
        AGENT_CODE,
+       --added by zhubin replace unit with credit.GA13 20140808
+       UNIT,
+       --added by zhubin
        MTD_LIFE_FYC,
        MTD_AH_FYC,
        MTD_GRP_FYC,
@@ -3583,6 +3590,10 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
              ADOL.DISSOLVED_AGENCY_DATE,
              ------Contribute Agent
              CRD.GENERICATTRIBUTE12,
+             ----added by zhubin replace unit with credit.GA13 20140808
+             ------Unit Code
+             CRD.GENERICATTRIBUTE13,
+             --added by zhubin
              SUM((CASE
                    WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB', 'PIB_Sub_Manager') AND
                         CRD.GENERICATTRIBUTE2 = 'LF' THEN
@@ -3634,6 +3645,10 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                 ADOL.DISSOLVED_AGENCY_DATE,
                 ------Contribute Agent
                 CRD.GENERICATTRIBUTE12,
+                --added by zhubin replace unit with credit.GA13 20140808
+                ------unit_code
+                CRD.GENERICATTRIBUTE13, 
+                --added by zhubin
                 ADOL.DO_RATE;
     ------Update contribute agent information
     UPDATE AIA_DIRECT_OVERRIDE_AGENT ADOA
@@ -3643,7 +3658,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
             ADOA.EFFECTIVEENDDATE,
             ADOA.POSITIONNAME,
             ADOA.POSITIONTITLE,
-            ADOA.UNIT,
+            --ADOA.UNIT,
             ADOA.AGENT_NAME,
             ADOA.CONTRACT_DATE,
             ADOA.CLASS,
@@ -3656,7 +3671,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                    API.EFFECTIVEENDDATE,
                    API.POSITIONNAME,
                    API.POSITIONTITLE,
-                   API.GENERICATTRIBUTE2, --Unit Code
+                   --API.GENERICATTRIBUTE2, --Unit Code
                    API.FIRSTNAME || API.MIDDLENAME || API.LASTNAME,
                    API.HIREDATE,
                    API.GENERICATTRIBUTE8, --Class Code
@@ -6202,6 +6217,8 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
          WHERE AAA.PERIODSEQ = V_PERIODSEQ;*/
       END IF;
     END IF;
+    
+    --modified by zhubin for duplicate half records 20140808
     ------Insert Leader Half record
     INSERT INTO AIA_ADPI_LEADER_HALF
       (PERIODSEQ,
@@ -6209,25 +6226,25 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
        PERIODNAME,
        PERIODSTARTDATE,
        PERIODENDDATE,
-       PARTICIPANTSEQ,
-       POSITIONSEQ,
-       EFFECTIVESTARTDATE,
-       EFFECTIVEENDDATE,
-       MANAGERSEQ,
-       POSITIONNAME,
-       POSITIONTITLE,
+       --PARTICIPANTSEQ,
+       --POSITIONSEQ,
+       --EFFECTIVESTARTDATE,
+       --EFFECTIVEENDDATE,
+       --MANAGERSEQ,
+       --POSITIONNAME,
+       --POSITIONTITLE,
        DISTRICT_CODE,
-       DM_NAME,
+       --DM_NAME,
        UNIT_CODE,
        LEADER_CODE,
        AGENCY,
        AGENCY_LEADER_NAME,
-       LDR_PARTICIPANTSEQ,
-       LDR_POSITIONSEQ,
-       ROLE,
+       --LDR_PARTICIPANTSEQ,
+       --LDR_POSITIONSEQ,
+       --ROLE,
        CLASS,
-       APPOINTMENT_DATE,
-       AGENCY_DISSOLVED_DATE,
+       --APPOINTMENT_DATE,
+       --AGENCY_DISSOLVED_DATE,
        /*fsc_code,
        fsc_name,
        fsc_class,
@@ -6241,30 +6258,30 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
        ADPI_AMOUNT,
        PIB_HALF,
        CREATE_DATE)
-      SELECT AAA.PERIODSEQ,
-             AAA.CALENDARNAME,
+      SELECT AAA.PERIODSEQ, 
+             AAA.CALENDARNAME, 
              AAA.PERIODNAME,
              AAA.PERIODSTARTDATE,
              AAA.PERIODENDDATE,
-             AAA.PARTICIPANTSEQ,
-             AAA.POSITIONSEQ,
-             AAA.EFFECTIVESTARTDATE,
-             AAA.EFFECTIVEENDDATE,
-             AAA.MANAGERSEQ,
-             AAA.POSITIONNAME,
-             AAA.POSITIONTITLE,
-             AAA.DISTRICT_CODE,
-             AAA.DM_NAME,
+             --AAA.PARTICIPANTSEQ,
+             --AAA.POSITIONSEQ,
+             --AAA.EFFECTIVESTARTDATE,
+             --AAA.EFFECTIVEENDDATE,
+             --AAA.MANAGERSEQ,
+             --AAA.POSITIONNAME,
+             --AAA.POSITIONTITLE,
+             AAA.DISTRICT_CODE, 
+             --AAA.DM_NAME,
              AAA.UNIT_CODE,
              AAA.LEADER_CODE,
              AAA.AGENCY,
              AAA.AGENCY_LEADER_NAME,
-             AAA.LDR_PARTICIPANTSEQ,
-             AAA.LDR_POSITIONSEQ,
-             AAA.ROLE,
+             --AAA.LDR_PARTICIPANTSEQ,
+             --AAA.LDR_POSITIONSEQ,
+             --AAA.ROLE,
              AAA.CLASS,
-             AAA.APPOINTMENT_DATE,
-             AAA.AGENCY_DISSOLVED_DATE,
+             --AAA.APPOINTMENT_DATE,
+             --AAA.AGENCY_DISSOLVED_DATE,
              /*aaa.fsc_code,
              aaa.fsc_name,
              aaa.fsc_class,
@@ -6291,26 +6308,29 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                 AAA.PERIODNAME,
                 AAA.PERIODSTARTDATE,
                 AAA.PERIODENDDATE,
-                AAA.PARTICIPANTSEQ,
-                AAA.POSITIONSEQ,
-                AAA.EFFECTIVESTARTDATE,
-                AAA.EFFECTIVEENDDATE,
-                AAA.MANAGERSEQ,
-                AAA.POSITIONNAME,
-                AAA.POSITIONTITLE,
+                --AAA.PARTICIPANTSEQ,
+                --AAA.POSITIONSEQ,
+                --AAA.EFFECTIVESTARTDATE,
+                --AAA.EFFECTIVEENDDATE,
+                --AAA.MANAGERSEQ,
+                --AAA.POSITIONNAME,
+                --AAA.POSITIONTITLE,
                 AAA.DISTRICT_CODE,
-                AAA.DM_NAME,
+                --AAA.DM_NAME,
                 AAA.UNIT_CODE,
                 AAA.LEADER_CODE,
                 AAA.AGENCY,
                 AAA.AGENCY_LEADER_NAME,
-                AAA.LDR_PARTICIPANTSEQ,
-                AAA.LDR_POSITIONSEQ,
-                AAA.ROLE,
-                AAA.CLASS,
-                AAA.APPOINTMENT_DATE,
-                AAA.AGENCY_DISSOLVED_DATE,
-                AAA.PIB_HALF;
+                --AAA.LDR_PARTICIPANTSEQ,
+                --AAA.LDR_POSITIONSEQ,
+                --AAA.ROLE,
+                AAA.CLASS;
+                --AAA.APPOINTMENT_DATE,
+                --AAA.AGENCY_DISSOLVED_DATE,
+                --AAA.PIB_HALF;
+    ----modified by zhubin
+    
+    --modified by zhubin for duplicate unit records 20140808           
     ------Insert Leader record
     INSERT INTO AIA_ADPI_LEADER
       (PERIODSEQ,
@@ -6318,25 +6338,25 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
        PERIODNAME,
        PERIODSTARTDATE,
        PERIODENDDATE,
-       PARTICIPANTSEQ,
-       POSITIONSEQ,
-       EFFECTIVESTARTDATE,
-       EFFECTIVEENDDATE,
-       MANAGERSEQ,
-       POSITIONNAME,
-       POSITIONTITLE,
+       --PARTICIPANTSEQ,
+       --POSITIONSEQ,
+       --EFFECTIVESTARTDATE,
+       --EFFECTIVEENDDATE,
+       --MANAGERSEQ,
+       --POSITIONNAME,
+       --POSITIONTITLE,
        DISTRICT_CODE,
-       DM_NAME,
+       --DM_NAME,
        UNIT_CODE,
        LEADER_CODE,
        AGENCY,
        AGENCY_LEADER_NAME,
-       LDR_PARTICIPANTSEQ,
-       LDR_POSITIONSEQ,
-       ROLE,
+       --LDR_PARTICIPANTSEQ,
+       --LDR_POSITIONSEQ,
+       --ROLE,
        CLASS,
-       APPOINTMENT_DATE,
-       AGENCY_DISSOLVED_DATE,
+       --APPOINTMENT_DATE,
+       --AGENCY_DISSOLVED_DATE,
        /*fsc_code,
        fsc_name,
        fsc_class,
@@ -6354,25 +6374,25 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
              AAA.PERIODNAME,
              AAA.PERIODSTARTDATE,
              AAA.PERIODENDDATE,
-             AAA.PARTICIPANTSEQ,
-             AAA.POSITIONSEQ,
-             AAA.EFFECTIVESTARTDATE,
-             AAA.EFFECTIVEENDDATE,
-             AAA.MANAGERSEQ,
-             AAA.POSITIONNAME,
-             AAA.POSITIONTITLE,
+             --AAA.PARTICIPANTSEQ,
+             --AAA.POSITIONSEQ,
+             --AAA.EFFECTIVESTARTDATE,
+             --AAA.EFFECTIVEENDDATE,
+             --AAA.MANAGERSEQ,
+             --AAA.POSITIONNAME,
+             --AAA.POSITIONTITLE,
              AAA.DISTRICT_CODE,
-             AAA.DM_NAME,
+             --AAA.DM_NAME,
              AAA.UNIT_CODE,
              AAA.LEADER_CODE,
              AAA.AGENCY,
              AAA.AGENCY_LEADER_NAME,
-             AAA.LDR_PARTICIPANTSEQ,
-             AAA.LDR_POSITIONSEQ,
-             AAA.ROLE,
+             --AAA.LDR_PARTICIPANTSEQ,
+             --AAA.LDR_POSITIONSEQ,
+             --AAA.ROLE,
              AAA.CLASS,
-             AAA.APPOINTMENT_DATE,
-             AAA.AGENCY_DISSOLVED_DATE,
+             --AAA.APPOINTMENT_DATE,
+             --AAA.AGENCY_DISSOLVED_DATE,
              /*aaa.fsc_code,
              aaa.fsc_name,
              aaa.fsc_class,
@@ -6398,26 +6418,28 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                 AAA.PERIODNAME,
                 AAA.PERIODSTARTDATE,
                 AAA.PERIODENDDATE,
-                AAA.PARTICIPANTSEQ,
-                AAA.POSITIONSEQ,
-                AAA.EFFECTIVESTARTDATE,
-                AAA.EFFECTIVEENDDATE,
-                AAA.MANAGERSEQ,
-                AAA.POSITIONNAME,
-                AAA.POSITIONTITLE,
+                --AAA.PARTICIPANTSEQ,
+                --AAA.POSITIONSEQ,
+                --AAA.EFFECTIVESTARTDATE,
+                --AAA.EFFECTIVEENDDATE,
+                --AAA.MANAGERSEQ,
+                --AAA.POSITIONNAME,
+                --AAA.POSITIONTITLE,
                 AAA.DISTRICT_CODE,
-                AAA.DM_NAME,
+                --AAA.DM_NAME,
                 AAA.UNIT_CODE,
                 AAA.LEADER_CODE,
                 AAA.AGENCY,
                 AAA.AGENCY_LEADER_NAME,
-                AAA.LDR_PARTICIPANTSEQ,
-                AAA.LDR_POSITIONSEQ,
-                AAA.ROLE,
+                --AAA.LDR_PARTICIPANTSEQ,
+                --AAA.LDR_POSITIONSEQ,
+                --AAA.ROLE,
                 AAA.CLASS,
-                AAA.APPOINTMENT_DATE,
-                AAA.AGENCY_DISSOLVED_DATE;
+                --AAA.APPOINTMENT_DATE,
+                --AAA.AGENCY_DISSOLVED_DATE;
     ------Update leader data
+    --modified by zhubin
+    
     UPDATE AIA_ADPI_LEADER AAL
        SET AAL.VALIDATION_PIB =
            (SELECT NVL(SUM(MEA.VALUE), 0)
