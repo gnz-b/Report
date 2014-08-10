@@ -6324,10 +6324,10 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                 --AAA.LDR_PARTICIPANTSEQ,
                 --AAA.LDR_POSITIONSEQ,
                 --AAA.ROLE,
-                AAA.CLASS;
+                AAA.CLASS,
                 --AAA.APPOINTMENT_DATE,
                 --AAA.AGENCY_DISSOLVED_DATE,
-                --AAA.PIB_HALF;
+                AAA.PIB_HALF;
     ----modified by zhubin
     
     --modified by zhubin for duplicate unit records 20140808           
@@ -6434,7 +6434,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                 --AAA.LDR_PARTICIPANTSEQ,
                 --AAA.LDR_POSITIONSEQ,
                 --AAA.ROLE,
-                AAA.CLASS,
+                AAA.CLASS;
                 --AAA.APPOINTMENT_DATE,
                 --AAA.AGENCY_DISSOLVED_DATE;
     ------Update leader data
