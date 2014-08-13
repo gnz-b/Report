@@ -1351,8 +1351,16 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
       INNER JOIN CS_PAYEE districtpay ON districtpos.PAYEESEQ = districtpay.PAYEESEQ AND districtpay.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN districtpay.EFFECTIVESTARTDATE AND districtpay.EFFECTIVEENDDATE - 1
       INNER JOIN CS_PARTICIPANT districtpar ON districtpar.PAYEESEQ = districtpay.PAYEESEQ AND districtpar.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN districtpar.EFFECTIVESTARTDATE AND districtpar.EFFECTIVEENDDATE - 1
       INNER JOIN CS_PARTICIPANT par ON par.PAYEESEQ = mea.PAYEESEQ AND par.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN par.EFFECTIVESTARTDATE and par.EFFECTIVEENDDATE - 1
-      LEFT JOIN (SELECT TXT_AGENCY_CODE, sum(coalesce(DEC_CURR_YTD_FYP_B4_SOC,0)) as DEC_CURR_YTD_FYP_B4_SOC, SUM(coalesce(DEC_CURR_YTD_RYP_B4_SOC,0)) as DEC_CURR_YTD_RYP_B4_SOC FROM AIA_PARIS WHERE VL_CYCLE_MONTH > DEC_MONTH AND VL_CYCLE_YEAR = DEC_YEAR GROUP BY TXT_AGENCY_CODE) ytdparis ON pos.NAME = ytdparis.TXT_AGENCY_CODE
-      LEFT JOIN (SELECT TXT_AGENCY_CODE, sum(coalesce(DEC_LY_FYP_B4_SOC,0)) as DEC_LY_FYP_B4_SOC, SUM(coalesce(DEC_LY_RYP_B4_SOC,0)) as DEC_LY_RYP_B4_SOC FROM AIA_PARIS WHERE VL_CYCLE_MONTH > DEC_MONTH AND (VL_CYCLE_YEAR - 1) = DEC_YEAR GROUP BY TXT_AGENCY_CODE) lyparis ON pos.NAME = lyparis.TXT_AGENCY_CODE
+      LEFT  JOIN (SELECT TXT_AGENCY_CODE, sum(coalesce(DEC_CURR_YTD_FYP_B4_SOC,0)) as DEC_CURR_YTD_FYP_B4_SOC, SUM(coalesce(DEC_CURR_YTD_RYP_B4_SOC,0)) as DEC_CURR_YTD_RYP_B4_SOC FROM AIA_PARIS WHERE VL_CYCLE_MONTH > DEC_MONTH AND VL_CYCLE_YEAR = DEC_YEAR GROUP BY TXT_AGENCY_CODE) ytdparis 
+      -----modified by zhubin remove the prefix of position name  
+            --ON pos.NAME = ytdparis.TXT_AGENCY_CODE
+            ON substr(pos.name, -5) = ytdparis.TXT_AGENCY_CODE
+      -----modified by zhubin 20130813
+      LEFT JOIN (SELECT TXT_AGENCY_CODE, sum(coalesce(DEC_LY_FYP_B4_SOC,0)) as DEC_LY_FYP_B4_SOC, SUM(coalesce(DEC_LY_RYP_B4_SOC,0)) as DEC_LY_RYP_B4_SOC FROM AIA_PARIS WHERE VL_CYCLE_MONTH > DEC_MONTH AND (VL_CYCLE_YEAR - 1) = DEC_YEAR GROUP BY TXT_AGENCY_CODE) lyparis 
+      -----modified by zhubin remove the prefix of position name  
+           --ON pos.NAME = lyparis.TXT_AGENCY_CODE 
+           ON substr(pos.name, -5) = lyparis.TXT_AGENCY_CODE
+      -----modified by zhubin 20130813     
       LEFT JOIN CS_MEASUREMENT fypmea ON fypmea.PAYEESEQ = mea.PAYEESEQ AND fypmea.PERIODSEQ = mea.PERIODSEQ AND fypmea.NAME = 'PM_PARIS_FYP_Standalone_AM_Direct_Team'
       LEFT JOIN CS_MEASUREMENT rypmea ON rypmea.PAYEESEQ = mea.PAYEESEQ AND rypmea.PERIODSEQ = mea.PERIODSEQ AND rypmea.NAME = 'PM_PARIS_RYP_Standalone_AM_Direct_Team'
       LEFT JOIN CS_MEASUREMENT fypmea ON fypmea.PAYEESEQ = mea.PAYEESEQ AND fypmea.PERIODSEQ = mea.PERIODSEQ AND fypmea.NAME = 'PM_PARIS_FYP_Standalone_AM_Direct_Team'LEFT JOIN CS_MEASUREMENT permea ON permea.PAYEESEQ = mea.PAYEESEQ AND permea.PERIODSEQ = mea.PERIODSEQ AND fypmea.NAME = 'PM_Standalone_AM_PA_Persistency'
@@ -1397,8 +1405,16 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
       INNER JOIN CS_PAYEE districtpay ON districtpos.PAYEESEQ = districtpay.PAYEESEQ AND districtpay.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN districtpay.EFFECTIVESTARTDATE AND districtpay.EFFECTIVEENDDATE - 1
       INNER JOIN CS_PARTICIPANT districtpar ON districtpar.PAYEESEQ = districtpay.PAYEESEQ AND districtpar.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN districtpar.EFFECTIVESTARTDATE AND districtpar.EFFECTIVEENDDATE - 1
       INNER JOIN CS_PARTICIPANT par ON par.PAYEESEQ = mea.PAYEESEQ AND par.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN par.EFFECTIVESTARTDATE and par.EFFECTIVEENDDATE - 1
-      LEFT JOIN (SELECT TXT_AGENCY_CODE, sum(DEC_CURR_YTD_FYP) as DEC_CURR_YTD_FYP, SUM(DEC_CURR_YTD_RYP) as DEC_CURR_YTD_RYP FROM AIA_PARIS WHERE to_number(to_char(SYSDATE, 'MM')) > DEC_MONTH AND to_number(to_char(SYSDATE, 'YYYY')) = DEC_YEAR GROUP BY TXT_AGENCY_CODE) ytdparis ON pos.NAME = ytdparis.TXT_AGENCY_CODE
-      LEFT JOIN (SELECT TXT_AGENCY_CODE, sum(DEC_LY_FYP) as DEC_LY_FYP, SUM(DEC_LY_RYP) as DEC_LY_RYP FROM AIA_PARIS WHERE to_number(to_char(SYSDATE, 'MM')) > DEC_MONTH AND (to_number(to_char(SYSDATE, 'YYYY')) - 1) = DEC_YEAR GROUP BY TXT_AGENCY_CODE) lyparis ON pos.NAME = lyparis.TXT_AGENCY_CODE
+      LEFT  JOIN (SELECT TXT_AGENCY_CODE, sum(DEC_CURR_YTD_FYP) as DEC_CURR_YTD_FYP, SUM(DEC_CURR_YTD_RYP) as DEC_CURR_YTD_RYP FROM AIA_PARIS WHERE to_number(to_char(SYSDATE, 'MM')) > DEC_MONTH AND to_number(to_char(SYSDATE, 'YYYY')) = DEC_YEAR GROUP BY TXT_AGENCY_CODE) ytdparis 
+      -----modified by zhubin remove the prefix of position name  
+            --ON pos.NAME = ytdparis.TXT_AGENCY_CODE
+            ON substr(pos.name, -5) = ytdparis.TXT_AGENCY_CODE
+      -----modified by zhubin 20130813
+      LEFT  JOIN (SELECT TXT_AGENCY_CODE, sum(DEC_LY_FYP) as DEC_LY_FYP, SUM(DEC_LY_RYP) as DEC_LY_RYP FROM AIA_PARIS WHERE to_number(to_char(SYSDATE, 'MM')) > DEC_MONTH AND (to_number(to_char(SYSDATE, 'YYYY')) - 1) = DEC_YEAR GROUP BY TXT_AGENCY_CODE) lyparis 
+      -----modified by zhubin remove the prefix of position name  
+            --ON pos.NAME = lyparis.TXT_AGENCY_CODE 
+            ON substr(pos.name, -5) = lyparis.TXT_AGENCY_CODE
+      -----modified by zhubin 20130813
       LEFT JOIN CS_MEASUREMENT fypmea ON fypmea.PAYEESEQ = mea.PAYEESEQ AND fypmea.PERIODSEQ = mea.PERIODSEQ AND fypmea.NAME = 'PM_PARIS_FYP_Exluding_Standalone_AM_Direct_Team'
       LEFT JOIN CS_MEASUREMENT permea ON permea.PAYEESEQ = mea.PAYEESEQ AND permea.PERIODSEQ = mea.PERIODSEQ AND fypmea.NAME = 'PM_District_PA_Persistency'
       LEFT JOIN CS_MEASUREMENT rypyearmea ON rypyearmea.PAYEESEQ = mea.PAYEESEQ AND rypyearmea.PERIODSEQ = mea.PERIODSEQ AND rypyearmea.NAME = 'SM_DM_PARIS_RYP_YEAR_SG'
@@ -1434,8 +1450,16 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
       INNER JOIN CS_PAYEE districtpay ON districtpos.PAYEESEQ = districtpay.PAYEESEQ AND districtpay.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN districtpay.EFFECTIVESTARTDATE AND districtpay.EFFECTIVEENDDATE - 1
       INNER JOIN CS_PARTICIPANT districtpar ON districtpar.PAYEESEQ = districtpay.PAYEESEQ AND districtpar.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN districtpar.EFFECTIVESTARTDATE AND districtpar.EFFECTIVEENDDATE - 1
       INNER JOIN CS_PARTICIPANT par ON par.PAYEESEQ = mea.PAYEESEQ AND par.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN par.EFFECTIVESTARTDATE and par.EFFECTIVEENDDATE - 1
-      LEFT JOIN (SELECT TXT_AGENCY_CODE, sum(DEC_CURR_YTD_FYP) as DEC_CURR_YTD_FYP, SUM(DEC_CURR_YTD_RYP) as DEC_CURR_YTD_RYP FROM AIA_PARIS WHERE to_number(to_char(SYSDATE, 'MM')) > DEC_MONTH AND to_number(to_char(SYSDATE, 'YYYY')) = DEC_YEAR GROUP BY TXT_AGENCY_CODE) ytdparis ON pos.NAME = ytdparis.TXT_AGENCY_CODE
-      LEFT JOIN (SELECT TXT_AGENCY_CODE, sum(DEC_LY_FYP) as DEC_LY_FYP, SUM(DEC_LY_RYP) as DEC_LY_RYP FROM AIA_PARIS WHERE to_number(to_char(SYSDATE, 'MM')) > DEC_MONTH AND (to_number(to_char(SYSDATE, 'YYYY')) - 1) = DEC_YEAR GROUP BY TXT_AGENCY_CODE) lyparis ON pos.NAME = lyparis.TXT_AGENCY_CODE
+      LEFT  JOIN (SELECT TXT_AGENCY_CODE, sum(DEC_CURR_YTD_FYP) as DEC_CURR_YTD_FYP, SUM(DEC_CURR_YTD_RYP) as DEC_CURR_YTD_RYP FROM AIA_PARIS WHERE to_number(to_char(SYSDATE, 'MM')) > DEC_MONTH AND to_number(to_char(SYSDATE, 'YYYY')) = DEC_YEAR GROUP BY TXT_AGENCY_CODE) ytdparis 
+      -----modified by zhubin remove the prefix of position name  
+            --ON pos.NAME = ytdparis.TXT_AGENCY_CODE
+            ON substr(pos.name, -5) = ytdparis.TXT_AGENCY_CODE
+      -----modified by zhubin 20130813
+      LEFT  JOIN (SELECT TXT_AGENCY_CODE, sum(DEC_LY_FYP) as DEC_LY_FYP, SUM(DEC_LY_RYP) as DEC_LY_RYP FROM AIA_PARIS WHERE to_number(to_char(SYSDATE, 'MM')) > DEC_MONTH AND (to_number(to_char(SYSDATE, 'YYYY')) - 1) = DEC_YEAR GROUP BY TXT_AGENCY_CODE) lyparis 
+      -----modified by zhubin remove the prefix of position name  
+            --ON pos.NAME = lyparis.TXT_AGENCY_CODE 
+            ON substr(pos.name, -5) = lyparis.TXT_AGENCY_CODE
+      -----modified by zhubin 20130813
       LEFT JOIN CS_MEASUREMENT fypmea ON fypmea.PAYEESEQ = mea.PAYEESEQ AND fypmea.PERIODSEQ = mea.PERIODSEQ AND fypmea.NAME = 'PM_PARIS_FYP_Exluding_Standalone_AM_Direct_Team'
       LEFT JOIN CS_MEASUREMENT permea ON permea.PAYEESEQ = mea.PAYEESEQ AND permea.PERIODSEQ = mea.PERIODSEQ AND fypmea.NAME = 'PM_District_PA_Persistency'
       LEFT JOIN CS_MEASUREMENT rypyearmea ON rypyearmea.PAYEESEQ = mea.PAYEESEQ AND rypyearmea.PERIODSEQ = mea.PERIODSEQ AND rypyearmea.NAME = 'SM_DM_PARIS_RYP_YEAR_SG'
@@ -1490,4 +1514,3 @@ BEGIN
 	*/
 END;
 /
-
