@@ -3068,12 +3068,24 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                AND SMEA.POSITIONSEQ = ASA.POSITIONSEQ
                AND SMEA.NAME IN ('SM_PIB_YTD_SG', 'SM_FYC_PL_YTD')),
            (ASA.SPI_RATE, ASA.YTD_SPI) =
-           (SELECT NVL(MAX(ADTI.GENERICNUMBER2), 0), NVL(SUM(ADTI.INCENTIVEVALUE), 0)
-              FROM AIA_DEPOSIT_TRACE_INFOR ADTI
-             WHERE ADTI.PERIODSEQ = ASA.PERIODSEQ
-               AND ADTI.POSITIONSEQ = ASA.POSITIONSEQ
-               AND ADTI.DEPOSITNAME = 'D_SPI_SG'
-               AND ADTI.INCENTIVENAME = 'I_SPI_YTD_SG'),
+           ------Begin Modified by Chao 20140812
+           /*(SELECT NVL(MAX(ADTI.GENERICNUMBER2), 0), NVL(SUM(ADTI.INCENTIVEVALUE), 0)
+            FROM AIA_DEPOSIT_TRACE_INFOR ADTI
+           WHERE ADTI.PERIODSEQ = ASA.PERIODSEQ
+             AND ADTI.POSITIONSEQ = ASA.POSITIONSEQ
+             AND ADTI.DEPOSITNAME = 'D_SPI_SG'
+             AND ADTI.INCENTIVENAME = 'I_SPI_YTD_SG'),*/(SELECT NVL(MAX(INC.GENERICNUMBER1),
+                                                                    0),
+                                                                NVL(SUM(INC.VALUE),
+                                                                    0)
+                                                           FROM CS_INCENTIVE INC
+                                                          WHERE INC.PERIODSEQ =
+                                                                V_PERIODSEQ
+                                                            AND INC.POSITIONSEQ =
+                                                                ASA.POSITIONSEQ
+                                                            AND INC.NAME =
+                                                                'I_SPI_YTD_SG'),
+           ------End Modified by Chao 20140812
            ASA.YTD_SPI_PQTR =
            (SELECT NVL(SUM(INC.VALUE), 0)
               FROM CS_INCENTIVE INC, CS_PERIOD PER
@@ -3689,7 +3701,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                 CRD.GENERICATTRIBUTE12,
                 --added by zhubin replace unit with credit.GA13 20140808
                 ------unit_code
-                CRD.GENERICATTRIBUTE13, 
+                CRD.GENERICATTRIBUTE13,
                 --added by zhubin
                 ADOL.DO_RATE;
     ------Update contribute agent information
@@ -5657,6 +5669,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
               FROM AIA_PAYEE_INFOR API
              WHERE API.PARTICIPANTID = AA.DM_CODE
                AND API.BUSINESSUNITNAME = 'SGPAGY'
+               AND API.POSITIONNAME LIKE '%T%' ------Modified by Chao 20140812
                AND ROWNUM = 1),
            (AA.AGENCY, AA.UM_CODE, AA.UM_NAME, AA.AGENCY_DISSOLVED_DATE, AA.ROLE) =
            (SELECT API.FIRSTNAME || API.MIDDLENAME || API.LASTNAME,
@@ -5667,12 +5680,14 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
               FROM AIA_PAYEE_INFOR API
              WHERE API.PARTICIPANTID = AA.UNIT_CODE
                AND API.BUSINESSUNITNAME = 'SGPAGY'
+               AND API.POSITIONNAME LIKE '%Y%' ------Modified by Chao 20140812
                AND ROWNUM = 1),
            (AA.CROSSOVER_DATE) =
            (SELECT API.GENERICDATE7
               FROM AIA_PAYEE_INFOR API
              WHERE API.PARTICIPANTID = AA.UM_CODE
                AND API.BUSINESSUNITNAME = 'SGPAGY'
+               AND API.POSITIONNAME LIKE '%T%' ------Modified by Chao 20140812
                AND ROWNUM = 1),
            (AA.FSC_NAME, AA.TERMINATION_DATE, AA.CLASS) =
            (SELECT API.FIRSTNAME || API.MIDDLENAME || API.LASTNAME,
@@ -5681,6 +5696,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
               FROM AIA_PAYEE_INFOR API
              WHERE API.PARTICIPANTID = AA.FSC_AGT_CODE
                AND API.BUSINESSUNITNAME = 'SGPAGY'
+               AND API.POSITIONNAME LIKE '%T%' ------MODified by chao 20140812
                AND ROWNUM = 1),
            UPDATE_DATE = SYSDATE
      WHERE AA.PERIODSEQ = V_PERIODSEQ;
@@ -5782,6 +5798,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
               FROM AIA_PAYEE_INFOR API
              WHERE API.PARTICIPANTID = AA.UM_CODE
                AND API.BUSINESSUNITNAME = 'SGPAGY'
+               AND API.POSITIONNAME LIKE '%T%' ------Modified by Chao 20140812
                AND ROWNUM = 1),
            (AA.AGENCY, AA.UM_CODE, AA.UM_NAME, AA.AGENCY_DISSOLVED_DATE, AA.ROLE) =
            (SELECT API.FIRSTNAME || API.MIDDLENAME || API.LASTNAME,
@@ -5792,6 +5809,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
               FROM AIA_PAYEE_INFOR API
              WHERE API.PARTICIPANTID = AA.UNIT_CODE
                AND API.BUSINESSUNITNAME = 'SGPAGY'
+               AND API.POSITIONNAME LIKE '%Y%' ------Modified by Chao 20140812
                AND ROWNUM = 1),
            (AA.FSC_NAME, AA.TERMINATION_DATE, AA.CLASS) =
            (SELECT API.FIRSTNAME || API.MIDDLENAME || API.LASTNAME,
@@ -5800,6 +5818,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
               FROM AIA_PAYEE_INFOR API
              WHERE API.PARTICIPANTID = AA.FSC_AGT_CODE
                AND API.BUSINESSUNITNAME = 'SGPAGY'
+               AND API.POSITIONNAME LIKE '%T%' ------Modified by Chao 20140812
                AND ROWNUM = 1),
            UPDATE_DATE = SYSDATE
      WHERE AA.PERIODSEQ = V_PERIODSEQ
@@ -6093,6 +6112,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
          AND CRD.PERIODSEQ = V_PERIODSEQ
          AND MEA.NAME IN
              ('PM_PIB_DIRECT_TEAM_Assigned', 'PM_PIB_DIRECT_TEAM_Not_Assigned')
+         AND API.POSITIONNAME LIKE '%Y%' ------Modified by Chao 20140812
          AND API.GENERICATTRIBUTE4 = APL.PARTICIPANTID
          AND APL.POSITIONTITLE IN ('AM', 'FSM', 'FSAD')
          AND API.BUSINESSUNITNAME = 'SGPAGY'
