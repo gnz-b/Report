@@ -1391,7 +1391,7 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
       pos.GENERICATTRIBUTE2 as agent_cd, pos.GENERICATTRIBUTE7 as agent_name, pos.GENERICATTRIBUTE11 as rank, par.TERMINATIONDATE as dissolved_dt, 'Y', 
       coalesce(ytdparis.DEC_CURR_YTD_FYP,0) + coalesce(fypmea.VALUE,0), coalesce(ytdparis.DEC_CURR_YTD_RYP,0) + coalesce(mea.VALUE,0), coalesce(lyparis.DEC_LY_FYP,0), coalesce(lyparis.DEC_LY_RYP,0),
       0, 0, 0, 0, 
-      (coalesce(lyparis.lyparis.DEC_LY_FYP,0) + coalesce(lyparis.DEC_LY_RYP,0)) as pytd_tp,
+      (coalesce(lyparis.DEC_LY_FYP,0) + coalesce(lyparis.DEC_LY_RYP,0)) as pytd_tp,
       coalesce(permea.VALUE,0), 
       CASE WHEN (coalesce(ytdparis.DEC_CURR_YTD_FYP,0) + coalesce(fypmea.VALUE,0)) >= rypyearmea.GENERICNUMBER1 THEN 'Y' ELSE 'N' END as min_fyp,
       CASE WHEN (coalesce(ytdparis.DEC_CURR_YTD_RYP,0) + coalesce(mea.VALUE,0)) >= rypyearmea.GENERICNUMBER2 THEN 'Y' ELSE 'N' END as min_ryp,
@@ -1436,7 +1436,7 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
       P.DEC_BONUS,DEC_BONUS_PAYMENT) = 
       (SELECT distinct
       coalesce(ytdparis.DEC_CURR_YTD_FYP,0) + coalesce(fypmea.VALUE,0), coalesce(ytdparis.DEC_CURR_YTD_RYP,0) + coalesce(mea.VALUE,0), coalesce(lyparis.DEC_LY_FYP,0), coalesce(lyparis.DEC_LY_RYP,0),
-      (coalesce(lyparis.lyparis.DEC_LY_FYP,0) + coalesce(lyparis.DEC_LY_RYP,0)),
+      (coalesce(lyparis.DEC_LY_FYP,0) + coalesce(lyparis.DEC_LY_RYP,0)),
       coalesce(permea.VALUE,0), 
       CASE WHEN (coalesce(ytdparis.DEC_CURR_YTD_FYP,0) + coalesce(fypmea.VALUE,0)) >= rypyearmea.GENERICNUMBER1 THEN 'Y' ELSE 'N' END as min_fyp,
       CASE WHEN (coalesce(ytdparis.DEC_CURR_YTD_RYP,0) + coalesce(mea.VALUE,0)) >= rypyearmea.GENERICNUMBER2 THEN 'Y' ELSE 'N' END as min_ryp,
@@ -1468,7 +1468,11 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
       LEFT JOIN CS_DEPOSIT dep ON dep.NAME = 'D_PARIS_DM_SG' AND incentive.PAYEESEQ = mea.PAYEESEQ AND incentive.PERIODSEQ = mea.PERIODSEQ
       WHERE mea.NAME = 'PM_PARIS_RYP_Exluding_Standalone_AM_Direct_Team' and mea.PERIODSEQ = V_PERIODSEQ AND 
       VL_CYCLE_MONTH = p.DEC_MONTH AND p.DEC_YEAR = VL_CYCLE_YEAR AND p.TXT_DISTRICT_CODE = pos.GENERICATTRIBUTE3 AND p.TXT_AGENCY_CODE = SUBSTR(pos.NAME, -5) AND
-      EXISTS(SELECT 1 FROM AIA_PARIS WHERE DEC_MONTH = VL_CYCLE_MONTH AND DEC_YEAR = VL_CYCLE_YEAR AND TXT_DISTRICT_CODE = pos.GENERICATTRIBUTE3 AND TXT_AGENCY_CODE = SUBSTR(pos.NAME, -5)));
+      EXISTS(SELECT 1 FROM AIA_PARIS WHERE DEC_MONTH = VL_CYCLE_MONTH AND DEC_YEAR = VL_CYCLE_YEAR AND TXT_DISTRICT_CODE = pos.GENERICATTRIBUTE3 AND TXT_AGENCY_CODE = SUBSTR(pos.NAME, -5)))
+      ----added by zhubin just update the cycle period records
+      WHERE P.DEC_MONTH = VL_CYCLE_MONTH AND P.DEC_YEAR = VL_CYCLE_YEAR
+      ----added by zhubin
+      ;
       
       DBMS_OUTPUT.PUT_LINE( 'Update PARIS DM completed ' );
       DBMS_OUTPUT.PUT_LINE( 'RPT_AIA_PARIS completed ' );
