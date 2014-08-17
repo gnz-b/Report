@@ -5159,7 +5159,8 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
             AQPB.MTH1_TOTAL_FYC_LF_RDR,
             AQPB.MTH1_TOTAL_FYC_LF) =
            (SELECT NVL(SUM(CASE
-                             WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
+                             --MODIFIED BY BIN        
+                             /*WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
                              -----modified by zhubin add the product type 'CS' for APB
                                   --CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')
                                   CRD.GENERICATTRIBUTE2 IN ('LF', 'HS', 'CS')
@@ -5167,7 +5168,14 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                                   THEN
                               CRD.VALUE
                              ELSE
-                              0
+                              0*/
+                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
+                                  OR CRDT.CREDITTYPEID IN ('APB')
+                             THEN 
+                               CRD.VALUE
+                             ELSE 
+                               0
+                             --MODIFIED BY BIN   
                            END),
                        0),
                    NVL(SUM(CASE
@@ -5187,7 +5195,8 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                            END),
                        0),
                    NVL(SUM(CASE
-                             WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
+                   ----MODIFIED BY BIN
+                             /*WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
                              -----modified by zhubin add the product type 'CS' for APB
                                   --CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')
                                   CRD.GENERICATTRIBUTE2 IN ('LF', 'HS', 'CS') AND
@@ -5195,7 +5204,15 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                                   CRD.GENERICBOOLEAN4 = 1 THEN
                               CRD.VALUE
                              ELSE
-                              0
+                              0*/
+                             WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
+                                  OR CRDT.CREDITTYPEID IN ('APB'))
+                                  AND CRD.GENERICBOOLEAN4 = 1
+                             THEN
+                               CRD.VALUE
+                             ELSE
+                               0
+                    ----MODIFIED BY BIN                  
                            END),
                        0),
                    NVL(SUM(CASE
@@ -5206,7 +5223,8 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                               0
                            END),
                        0) + NVL(SUM(CASE
-                                      WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
+                       ----MODIFIED BY BIN
+                                      /*WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
                                -----modified by zhubin add the product type 'CS' for APB
                                     --CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')
                                     CRD.GENERICATTRIBUTE2 IN ('LF', 'HS', 'CS') AND
@@ -5214,18 +5232,34 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                                            CRD.GENERICBOOLEAN4 = 1 THEN
                                        CRD.VALUE
                                       ELSE
-                                       0
+                                       0*/
+                                       WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
+                                            OR CRDT.CREDITTYPEID IN ('APB'))
+                                            AND CRD.GENERICBOOLEAN4 = 1
+                                       THEN
+                                         CRD.VALUE
+                                       ELSE
+                                         0
+                       ----MODIFIED BY BIN                   
                                     END),
                                 0),
                    NVL(SUM(CASE
-                             WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
+                   ----MODIFIED BY BIN
+                             /*WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
                              -----modified by zhubin add the product type 'CS' for APB
                                   --CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')
                                   CRD.GENERICATTRIBUTE2 IN ('LF', 'HS', 'CS') THEN
                              -----modified by zhubin 20140811
                               CRD.VALUE
                              ELSE
-                              0
+                              0*/
+                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
+                                  OR CRDT.CREDITTYPEID IN ('APB')
+                             THEN 
+                               CRD.VALUE
+                             ELSE 
+                               0                            
+                   ----MODIFIED BY BIN        
                            END),
                        0) + NVL(SUM(CASE
                                       WHEN CRDT.CREDITTYPEID = 'FYC' AND
@@ -5255,7 +5289,8 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
             AQPB.MTH2_TOTAL_FYC_LF_RDR,
             AQPB.MTH2_TOTAL_FYC_LF) =
            (SELECT NVL(SUM(CASE
-                             WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
+           ----MODIFIED BY BIN
+                             /*WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
                              -----modified by zhubin add the product type 'CS' for APB
                                   --CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')
                                   CRD.GENERICATTRIBUTE2 IN ('LF', 'HS', 'CS')
@@ -5263,7 +5298,14 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                                   THEN
                               CRD.VALUE
                              ELSE
-                              0
+                              0*/
+                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
+                                  OR CRDT.CREDITTYPEID IN ('APB')
+                             THEN 
+                               CRD.VALUE
+                             ELSE 
+                               0  
+            ----MODIFIED BY BIN                              
                            END),
                        0),
                    NVL(SUM(CASE
@@ -5283,7 +5325,8 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                            END),
                        0),
                    NVL(SUM(CASE
-                             WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
+                   ----MODIFIED BY BIN
+                             /*WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
                              -----modified by zhubin add the product type 'CS' for APB
                                   --CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')
                                   CRD.GENERICATTRIBUTE2 IN ('LF', 'HS', 'CS') AND
@@ -5291,7 +5334,15 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                                   CRD.GENERICBOOLEAN4 = 1 THEN
                               CRD.VALUE
                              ELSE
-                              0
+                              0*/
+                             WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
+                                  OR CRDT.CREDITTYPEID IN ('APB'))
+                                  AND CRD.GENERICBOOLEAN4 = 1
+                             THEN
+                               CRD.VALUE
+                             ELSE
+                               0
+                   ----MODIFIED BY BIN
                            END),
                        0),
                    NVL(SUM(CASE
@@ -5302,7 +5353,8 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                               0
                            END),
                        0) + NVL(SUM(CASE
-                                      WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
+                       ----MODIFIED BY BIN
+                                      /*WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
                                       -----modified by zhubin add the product type 'CS' for APB
                                       --CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')
                                            CRD.GENERICATTRIBUTE2 IN ('LF', 'HS', 'CS') AND
@@ -5310,18 +5362,34 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                                            CRD.GENERICBOOLEAN4 = 1 THEN
                                        CRD.VALUE
                                       ELSE
-                                       0
+                                       0*/
+                                      WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
+                                            OR CRDT.CREDITTYPEID IN ('APB'))
+                                            AND CRD.GENERICBOOLEAN4 = 1
+                                       THEN
+                                         CRD.VALUE
+                                       ELSE
+                                         0
+                       ----MODIFIED BY BIN
                                     END),
                                 0),
                    NVL(SUM(CASE
-                             WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
+                   ----MODIFIED BY BIN
+                             /*WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
                              -----modified by zhubin add the product type 'CS' for APB
                                   --CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')
                                   CRD.GENERICATTRIBUTE2 IN ('LF', 'HS', 'CS') THEN
                              -----modified by zhubin 20140811
                               CRD.VALUE
                              ELSE
-                              0
+                              0*/
+                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
+                                  OR CRDT.CREDITTYPEID IN ('APB')
+                             THEN 
+                               CRD.VALUE
+                             ELSE 
+                               0
+                   ----MODIFIED BY BIN            
                            END),
                        0) + NVL(SUM(CASE
                                       WHEN CRDT.CREDITTYPEID = 'FYC' AND
@@ -5351,7 +5419,8 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
             AQPB.MTH3_TOTAL_FYC_LF_RDR,
             AQPB.MTH3_TOTAL_FYC_LF) =
            (SELECT NVL(SUM(CASE
-                             WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
+           ----MODIFIED BY BIN
+                             /*WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
                              -----modified by zhubin add the product type 'CS' for APB
                                   --CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')
                                   CRD.GENERICATTRIBUTE2 IN ('LF', 'HS', 'CS')
@@ -5359,7 +5428,14 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                                   THEN
                               CRD.VALUE
                              ELSE
-                              0
+                              0*/
+                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
+                                  OR CRDT.CREDITTYPEID IN ('APB')
+                             THEN 
+                               CRD.VALUE
+                             ELSE 
+                               0
+            ----MODIFIED BY BIN                     
                            END),
                        0),
                    NVL(SUM(CASE
@@ -5379,7 +5455,8 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                            END),
                        0),
                    NVL(SUM(CASE
-                             WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
+                   ----MODIFIED BY BIN
+                             /*WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
                              -----modified by zhubin add the product type 'CS' for APB
                                   --CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')
                                   CRD.GENERICATTRIBUTE2 IN ('LF', 'HS', 'CS') AND
@@ -5387,7 +5464,15 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                                   CRD.GENERICBOOLEAN4 = 1 THEN
                               CRD.VALUE
                              ELSE
-                              0
+                              0*/
+                             WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
+                                  OR CRDT.CREDITTYPEID IN ('APB'))
+                                  AND CRD.GENERICBOOLEAN4 = 1
+                             THEN
+                               CRD.VALUE
+                             ELSE
+                               0
+                  ----MODIFIED BY BIN             
                            END),
                        0),
                    NVL(SUM(CASE
@@ -5398,7 +5483,8 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                               0
                            END),
                        0) + NVL(SUM(CASE
-                                      WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
+                       ----MODIFIED BY BIN
+                                      /*WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
                                       -----modified by zhubin add the product type 'CS' for APB
                                            --CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')
                                            CRD.GENERICATTRIBUTE2 IN ('LF', 'HS', 'CS') AND
@@ -5406,11 +5492,20 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                                            CRD.GENERICBOOLEAN4 = 1 THEN
                                        CRD.VALUE
                                       ELSE
+                                       0*/
+                                      WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
+                                          OR CRDT.CREDITTYPEID IN ('APB'))
+                                          AND CRD.GENERICBOOLEAN4 = 1
+                                     THEN
+                                       CRD.VALUE
+                                     ELSE
                                        0
+                       ----MODIFIED BY BIN 
                                     END),
                                 0),
                    NVL(SUM(CASE
-                             WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
+                   ----MODIFIED BY BIN
+                             /*WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB') AND
                              -----modified by zhubin add the product type 'CS' for APB
                                   --CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')
                                   CRD.GENERICATTRIBUTE2 IN ('LF', 'HS', 'CS')
@@ -5418,7 +5513,14 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                                   THEN
                               CRD.VALUE
                              ELSE
-                              0
+                              0*/
+                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
+                                  OR CRDT.CREDITTYPEID IN ('APB')
+                             THEN 
+                               CRD.VALUE
+                             ELSE 
+                               0
+                   ----MODIFIED BY BIN            
                            END),
                        0) + NVL(SUM(CASE
                                       WHEN CRDT.CREDITTYPEID = 'FYC' AND
