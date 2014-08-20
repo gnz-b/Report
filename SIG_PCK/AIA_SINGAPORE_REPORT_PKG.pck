@@ -325,7 +325,9 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                       V_PERIODENDDATE,
                       EXTRACT(YEAR FROM V_PERIODSTARTDATE),
                       SUBSTR(V_PERIODNAME, 0, LENGTH(V_PERIODNAME) - 5),
-                      SUBSTR('0' || MOD(EXTRACT(MONTH FROM V_PERIODSTARTDATE), 13), -2),
+                      SUBSTR('0' ||
+                             MOD(EXTRACT(MONTH FROM V_PERIODSTARTDATE), 13),
+                             -2),
                       T.BUSINESSUNITNAME,
                       --T.POSITIONTITLE,
                       T.GENERICATTRIBUTE6 DISTRICT_CODE,
@@ -347,7 +349,9 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                       V_PERIODENDDATE,
                       EXTRACT(YEAR FROM V_PERIODSTARTDATE),
                       SUBSTR(V_PERIODNAME, 0, LENGTH(V_PERIODNAME) - 5),
-                      SUBSTR('0' || MOD(EXTRACT(MONTH FROM V_PERIODSTARTDATE), 13), -2),
+                      SUBSTR('0' ||
+                             MOD(EXTRACT(MONTH FROM V_PERIODSTARTDATE), 13),
+                             -2),
                       T.BUSINESSUNITNAME,
                       --T.POSITIONTITLE,
                       'All' DISTRICT_CODE,
@@ -389,7 +393,9 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                       V_PERIODENDDATE,
                       EXTRACT(YEAR FROM V_PERIODSTARTDATE),
                       SUBSTR(V_PERIODNAME, 0, LENGTH(V_PERIODNAME) - 5),
-                      SUBSTR('0' || MOD(EXTRACT(MONTH FROM V_PERIODSTARTDATE), 13), -2),
+                      SUBSTR('0' ||
+                             MOD(EXTRACT(MONTH FROM V_PERIODSTARTDATE), 13),
+                             -2),
                       T.BUSINESSUNITNAME,
                       --T.POSITIONTITLE,
                       'All' DISTRICT_CODE,
@@ -3781,8 +3787,9 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                     0
                  END)),
              SUM((CASE
-                   WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB', 'PIB_Sub_Manager') AND
-                        CRD.GENERICATTRIBUTE2 IN ('LF', 'PA', 'CS', 'CL') THEN
+                   WHEN (CRDT.CREDITTYPEID IN ('FYC', 'PIB_Sub_Manager') AND
+                        CRD.GENERICATTRIBUTE2 IN ('LF', 'PA', 'CS', 'CL')) OR
+                        (CRDT.CREDITTYPEID = 'APB' AND CRD.GENERICATTRIBUTE2 = 'LF') THEN
                     CRD.VALUE
                    ELSE
                     0
@@ -3800,6 +3807,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
          AND CRDT.REMOVEDATE = C_REMOVEDATE
          AND ADOL.PERIODSEQ = V_PERIODSEQ
          AND CRD.GENERICATTRIBUTE12 IS NOT NULL
+         AND CRDT.CREDITTYPEID IN ('FYC', 'APB', 'PIB_Sub_Manager')
        GROUP BY ADOL.POSITIONSEQ,
                 ADOL.LAST_DATE,
                 ADOL.LDR_UNIT,
@@ -3903,7 +3911,12 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                      NVL(SUM(T.QUARTER_GRP_FYC), 0) + ADOA.MTD_GRP_FYC
                 FROM AIA_DIRECT_OVERRIDE_AGENT T
                WHERE T.PERIODSEQ = V_PRIOR_PERIODSEQ
-                 AND T.POSITIONSEQ = ADOA.POSITIONSEQ),
+                 AND T.POSITIONSEQ = ADOA.POSITIONSEQ
+                    --Begin Modified by Chao 20140819
+                    --Must be the same leader
+                 AND T.MANAGERSEQ = ADOA.MANAGERSEQ
+              --End Modified by Chao 20140819
+              ),
              UPDATE_DATE = SYSDATE
        WHERE ADOA.PERIODSEQ = V_PERIODSEQ;
       IF MOD(EXTRACT(MONTH FROM V_PERIODSTARTDATE), 3) = 2 THEN
@@ -4280,9 +4293,9 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
        RELEASE_DATE,
        ------Contribute Agent
        ------Begin Modified by Chao 20140814
-       UNIT,
+       --UNIT,
        AGENT_CODE,
-       CLASS,
+       --CLASS,
        CREATE_DATE)
       SELECT V_PERIODSEQ,
              V_CALENDARNAME,
@@ -4298,9 +4311,9 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
              AROL.SUSPEND_DATE,
              AROL.RELEASE_DATE,
              ------Contribute Agent
-             ADTI.GENERICATTRIBUTE5, --Contribute UNit
+             --ADTI.GENERICATTRIBUTE5, --Contribute UNit
              ADTI.GENERICATTRIBUTE1, --Contribute Agent
-             ADTI.GENERICATTRIBUTE6, --Contribute Class             
+             --ADTI.GENERICATTRIBUTE6, --Contribute Class             
              ------End Modified by Chao 20140814
              SYSDATE
         FROM AIA_RENEWAL_OVERRIDE_LEADER AROL, AIA_DEPOSIT_TRACE_INFOR ADTI
@@ -4320,10 +4333,11 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                 AROL.SUSPEND_DATE,
                 AROL.RELEASE_DATE,
                 ------Contribute Agent
-                --ADTI.GENERICATTRIBUTE1
-                ADTI.GENERICATTRIBUTE5, --Contribute UNit
+                ADTI.GENERICATTRIBUTE1
+      /*ADTI.GENERICATTRIBUTE5, --Contribute UNit
                 ADTI.GENERICATTRIBUTE1, --Contribute Agent
-                ADTI.GENERICATTRIBUTE6; --Contribute Class
+      ADTI.GENERICATTRIBUTE6*/
+      ; --Contribute Class
     ------Update contribute agent information
     UPDATE AIA_RENEWAL_OVERRIDE_AGENT AROA
        SET (AROA.PARTICIPANTSEQ,
@@ -4332,10 +4346,11 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
             AROA.EFFECTIVEENDDATE,
             AROA.POSITIONNAME,
             AROA.POSITIONTITLE,
-            --AROA.UNIT,
+            --Begin Modified by Chao 20140818
+            AROA.UNIT,
             AROA.AGENT_NAME,
             AROA.CONTRACT_DATE,
-            --AROA.CLASS,
+            AROA.CLASS,
             AROA.AGENT_STATUS_CODE,
             AROA.TERMINATION_DATE,
             UPDATE_DATE) =
@@ -4345,10 +4360,11 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                    API.EFFECTIVEENDDATE,
                    API.POSITIONNAME,
                    API.POSITIONTITLE,
-                   --API.GENERICATTRIBUTE2, --Unit Code
+                   API.GENERICATTRIBUTE2, --Unit Code
                    API.FIRSTNAME || API.MIDDLENAME || API.LASTNAME,
                    API.HIREDATE,
-                   --API.GENERICATTRIBUTE8, --Class Code
+                   API.GENERICATTRIBUTE8, --Class Code
+                   --End Modified by Chao 20140818
                    API.GENERICATTRIBUTE1,
                    API.TERMINATIONDATE,
                    SYSDATE
@@ -5169,9 +5185,9 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                               CRD.VALUE
                              ELSE
                               0*/
-                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
-                                  OR CRDT.CREDITTYPEID IN ('APB')
-                             THEN 
+                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND
+                                  CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')) OR
+                                  CRDT.CREDITTYPEID IN ('APB') THEN
                                CRD.VALUE
                              ELSE 
                                0
@@ -5205,10 +5221,10 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                               CRD.VALUE
                              ELSE
                               0*/
-                             WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
-                                  OR CRDT.CREDITTYPEID IN ('APB'))
-                                  AND CRD.GENERICBOOLEAN4 = 1
-                             THEN
+                             WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND
+                                  CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')) OR
+                                  CRDT.CREDITTYPEID IN ('APB')) AND
+                                  CRD.GENERICBOOLEAN4 = 1 THEN
                                CRD.VALUE
                              ELSE
                                0
@@ -5233,10 +5249,10 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                                        CRD.VALUE
                                       ELSE
                                        0*/
-                                       WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
-                                            OR CRDT.CREDITTYPEID IN ('APB'))
-                                            AND CRD.GENERICBOOLEAN4 = 1
-                                       THEN
+                                      WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND
+                                           CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')) OR
+                                           CRDT.CREDITTYPEID IN ('APB')) AND
+                                           CRD.GENERICBOOLEAN4 = 1 THEN
                                          CRD.VALUE
                                        ELSE
                                          0
@@ -5253,9 +5269,9 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                               CRD.VALUE
                              ELSE
                               0*/
-                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
-                                  OR CRDT.CREDITTYPEID IN ('APB')
-                             THEN 
+                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND
+                                  CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')) OR
+                                  CRDT.CREDITTYPEID IN ('APB') THEN
                                CRD.VALUE
                              ELSE 
                                0                            
@@ -5299,9 +5315,9 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                               CRD.VALUE
                              ELSE
                               0*/
-                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
-                                  OR CRDT.CREDITTYPEID IN ('APB')
-                             THEN 
+                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND
+                                  CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')) OR
+                                  CRDT.CREDITTYPEID IN ('APB') THEN
                                CRD.VALUE
                              ELSE 
                                0  
@@ -5335,10 +5351,10 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                               CRD.VALUE
                              ELSE
                               0*/
-                             WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
-                                  OR CRDT.CREDITTYPEID IN ('APB'))
-                                  AND CRD.GENERICBOOLEAN4 = 1
-                             THEN
+                             WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND
+                                  CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')) OR
+                                  CRDT.CREDITTYPEID IN ('APB')) AND
+                                  CRD.GENERICBOOLEAN4 = 1 THEN
                                CRD.VALUE
                              ELSE
                                0
@@ -5363,10 +5379,10 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                                        CRD.VALUE
                                       ELSE
                                        0*/
-                                      WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
-                                            OR CRDT.CREDITTYPEID IN ('APB'))
-                                            AND CRD.GENERICBOOLEAN4 = 1
-                                       THEN
+                                      WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND
+                                           CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')) OR
+                                           CRDT.CREDITTYPEID IN ('APB')) AND
+                                           CRD.GENERICBOOLEAN4 = 1 THEN
                                          CRD.VALUE
                                        ELSE
                                          0
@@ -5383,9 +5399,9 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                               CRD.VALUE
                              ELSE
                               0*/
-                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
-                                  OR CRDT.CREDITTYPEID IN ('APB')
-                             THEN 
+                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND
+                                  CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')) OR
+                                  CRDT.CREDITTYPEID IN ('APB') THEN
                                CRD.VALUE
                              ELSE 
                                0
@@ -5429,9 +5445,9 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                               CRD.VALUE
                              ELSE
                               0*/
-                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
-                                  OR CRDT.CREDITTYPEID IN ('APB')
-                             THEN 
+                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND
+                                  CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')) OR
+                                  CRDT.CREDITTYPEID IN ('APB') THEN
                                CRD.VALUE
                              ELSE 
                                0
@@ -5465,10 +5481,10 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                               CRD.VALUE
                              ELSE
                               0*/
-                             WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
-                                  OR CRDT.CREDITTYPEID IN ('APB'))
-                                  AND CRD.GENERICBOOLEAN4 = 1
-                             THEN
+                             WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND
+                                  CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')) OR
+                                  CRDT.CREDITTYPEID IN ('APB')) AND
+                                  CRD.GENERICBOOLEAN4 = 1 THEN
                                CRD.VALUE
                              ELSE
                                0
@@ -5493,10 +5509,10 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                                        CRD.VALUE
                                       ELSE
                                        0*/
-                                      WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
-                                          OR CRDT.CREDITTYPEID IN ('APB'))
-                                          AND CRD.GENERICBOOLEAN4 = 1
-                                     THEN
+                                      WHEN ((CRDT.CREDITTYPEID IN ('FYC') AND
+                                           CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')) OR
+                                           CRDT.CREDITTYPEID IN ('APB')) AND
+                                           CRD.GENERICBOOLEAN4 = 1 THEN
                                        CRD.VALUE
                                      ELSE
                                        0
@@ -5514,9 +5530,9 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                               CRD.VALUE
                              ELSE
                               0*/
-                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND CRD.GENERICATTRIBUTE2 IN ('LF', 'HS'))
-                                  OR CRDT.CREDITTYPEID IN ('APB')
-                             THEN 
+                             WHEN (CRDT.CREDITTYPEID IN ('FYC') AND
+                                  CRD.GENERICATTRIBUTE2 IN ('LF', 'HS')) OR
+                                  CRDT.CREDITTYPEID IN ('APB') THEN
                                CRD.VALUE
                              ELSE 
                                0
