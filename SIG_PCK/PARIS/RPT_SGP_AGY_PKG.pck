@@ -509,20 +509,29 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
 		
 		-- By right only 1 credit C_PA_Persistency_QTD per agent each month
 		UPDATE	RPT_SGPAGY_PA_QTR_PRD_BONUS rpt
-		SET	PERSISTENCY = ( SELECT SUM( c.value )
+		SET	PERSISTENCY = 
+----Modified by bin replace the C_PA_Persistency_QTD with C_PA_Bonus_Qualification.GN1
+    (SELECT c.GENERICNUMBER1
+							FROM cs_credit c
+								WHERE c.periodseq = V_PERIODSEQ
+									AND c.name = 'C_PA_Bonus_Qualification'
+									AND rpt.positionseq = c.positionseq)
+    /*( SELECT SUM( c.value )
 							FROM cs_credit c
 								WHERE c.periodseq = V_PERIODSEQ
 									AND c.name = 'C_PA_Persistency_QTD'
 									AND rpt.positionseq = c.positionseq
 								GROUP BY c.positionseq
-							)
+							)*/
 		WHERE	rpt.periodseq = V_PERIODSEQ
 				AND rpt.positionseq IN( SELECT DISTINCT c.positionseq
 										FROM	cs_credit c
 										WHERE	c.periodseq = V_PERIODSEQ
-												AND c.name = 'C_PA_Persistency_QTD'
-												AND rpt.positionseq = c.positionseq
+												--AND c.name = 'C_PA_Persistency_QTD'
+												AND c.name = 'C_PA_Bonus_Qualification'
+                        AND rpt.positionseq = c.positionseq
 									);
+----Modified by bin 20140818               
 		UPDATE	RPT_SGPAGY_PA_QTR_PRD_BONUS rpt
 		SET	MEET = ( SELECT CASE 
 								WHEN m.value >= 1 THEN 'Y'
@@ -1446,7 +1455,11 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
       INNER JOIN CS_PERIOD period ON period.PERIODSEQ = mea.PERIODSEQ AND period.REMOVEDATE > SYSDATE
       INNER JOIN CS_PAYEE pay ON mea.PAYEESEQ = pay.PAYEESEQ AND pay.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN pay.EFFECTIVESTARTDATE AND pay.EFFECTIVEENDDATE - 1
       INNER JOIN CS_POSITION pos ON pos.PAYEESEQ = mea.PAYEESEQ AND pos.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN pos.EFFECTIVESTARTDATE AND pos.EFFECTIVEENDDATE - 1
-      INNER JOIN CS_POSITION districtpos ON ('SGY' || pos.GENERICATTRIBUTE3) = districtpos.NAME AND districtpos.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN districtpos.EFFECTIVESTARTDATE AND districtpos.EFFECTIVEENDDATE - 1
+      INNER JOIN CS_POSITION districtpos 
+      ----modified by Bin maybe the pos'SELECT prefix is 'BRY'       
+            --ON ('SGY' || pos.GENERICATTRIBUTE3) = substr(districtpos.NAME,-5) AND districtpos.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN districtpos.EFFECTIVESTARTDATE AND districtpos.EFFECTIVEENDDATE - 1
+            ON pos.GENERICATTRIBUTE3 = substr(districtpos.NAME,-5) AND districtpos.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN districtpos.EFFECTIVESTARTDATE AND districtpos.EFFECTIVEENDDATE - 1
+      ----modified by Bin 20140814
       INNER JOIN CS_PAYEE districtpay ON districtpos.PAYEESEQ = districtpay.PAYEESEQ AND districtpay.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN districtpay.EFFECTIVESTARTDATE AND districtpay.EFFECTIVEENDDATE - 1
       INNER JOIN CS_PARTICIPANT districtpar ON districtpar.PAYEESEQ = districtpay.PAYEESEQ AND districtpar.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN districtpar.EFFECTIVESTARTDATE AND districtpar.EFFECTIVEENDDATE - 1
       INNER JOIN CS_PARTICIPANT par ON par.PAYEESEQ = mea.PAYEESEQ AND par.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN par.EFFECTIVESTARTDATE and par.EFFECTIVEENDDATE - 1
