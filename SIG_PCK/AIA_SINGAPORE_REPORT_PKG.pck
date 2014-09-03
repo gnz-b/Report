@@ -125,6 +125,9 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
             GENERICATTRIBUTE6, --District Code
             GENERICATTRIBUTE8, --Class Code
             GENERICATTRIBUTE9,
+            --ADDED BY ZHUBIN SET THE ROLE 20140827
+            GENERICATTRIBUTE10, --ROLE
+            --ADDED END
             GENERICDATE1,
             GENERICDATE2,
             GENERICDATE8) =
@@ -153,6 +156,9 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                    UPPER(POS.GENERICATTRIBUTE3), ------District Code
                    UPPER(POS.GENERICATTRIBUTE4), ------Class Code
                    PAR.GENERICATTRIBUTE1, ------Status Number
+             --ADDED BY ZHUBIN SET THE ROLE 20140827
+                   POS.GENERICATTRIBUTE11,
+             --ADDED EDN
                    POS.GENERICDATE1, ------Promotion Date
                    POS.GENERICDATE2, ------Demotion Date
                    POS.GENERICDATE4 ------Assigned_Date
@@ -279,7 +285,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
              WHERE TXTTYPE IN ('C', 'D')
                AND DTEEFFECTIVEDATE IS NOT NULL
                AND DTECYCLE = LAST_DAY(V_PERIODSTARTDATE)
-               AND TXTOLDDMNAME = T.PARTICIPANTID
+               AND TRIM(TXTOLDDMCODE) = T.PARTICIPANTID
                AND DECSTATUS = 0
                AND ROWNUM = 1),
            T.GENERICDATE9 =
@@ -1998,7 +2004,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                            END),
                        0),
                    NVL(AIS.DPI, 0) + NVL(SUM(CASE
-                                               WHEN ADTI.GENERICATTRIBUTE2 = '20134' --'20119' 
+                                               WHEN ADTI.GENERICATTRIBUTE2 = '20131'--'20134' '20119' yuwei
                                                 THEN
                                                 ADTI.CREDITVALUE
                                                ELSE
@@ -2128,7 +2134,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                                                END),
                                            0),
                    NVL(AIS.ADPI, 0) + NVL(SUM(CASE
-                                                WHEN ADTI.GENERICATTRIBUTE2 = '20131' --'20135' 
+                                                WHEN ADTI.GENERICATTRIBUTE2 = '20141'--'20131' '20135' yuwei
                                                  THEN
                                                  ADTI.CREDITVALUE
                                                 ELSE
@@ -2659,7 +2665,7 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                      END),
                  0),
              NVL(SUM(CASE
-                       WHEN ADTI.GENERICATTRIBUTE2 = '40109' THEN
+                       WHEN ADTI.GENERICATTRIBUTE2 IN ('40109', '40113')/*= '40109'yuwei*/ THEN
                         ADTI.CREDITVALUE
                        ELSE
                         0
@@ -3036,7 +3042,15 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                T.LEADER_NAME,
                T.LEADER_PROMOTION_DATE,
                T.LEADER_DEMOTION_DATE,
-               T.NLPI_PAYMENTS_NUMBER,
+----modified by zhubin get the latest payment number              
+              --NLPI_PAYMENTS_NUMBER
+               (SELECT MEA.VALUE
+              FROM CS_MEASUREMENT MEA
+             WHERE MEA.NAME = 'SM_NLPI_Paid_Mths'
+               AND MEA.POSITIONSEQ = T.Managerseq               
+               AND MEA.PERIODSEQ = V_PERIODSEQ
+               AND ROWNUM = 1) AS NLPI_PAYMENTS_NUMBER,
+----modified end
                T.CONTRIBUTING_AGENT_CODE,
                T.CONTRIBUTING_AGENT_NAME,
                T.CONTRACT_DATE,
@@ -3765,7 +3779,8 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
              ------Unit Code
              CRD.GENERICATTRIBUTE13,
              --added by zhubin
-             SUM((CASE
+----MODIFIED BY BIN 20140902 CHANGE THE WAY TO GET MTD LIFE FYC, MTD A & H FYC, MTD GRP FYC
+             /*SUM((CASE
                    WHEN CRDT.CREDITTYPEID IN ('FYC', 'APB', 'PIB_Sub_Manager') AND
                         CRD.GENERICATTRIBUTE2 = 'LF' THEN
                     CRD.VALUE
@@ -3785,7 +3800,9 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                     CRD.VALUE
                    ELSE
                     0
-                 END)),
+                 END)),*/
+              0,0,0,
+----MODIFIED END             
              SUM((CASE
                    WHEN (CRDT.CREDITTYPEID IN ('FYC', 'PIB_Sub_Manager') AND
                         CRD.GENERICATTRIBUTE2 IN ('LF', 'PA', 'CS', 'CL')) OR
@@ -3892,6 +3909,44 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                AND ADTI.DEPOSITNAME = 'D_Direct_Override_BN'
                AND ADTI.GENERICATTRIBUTE1 = ADOA.AGENT_CODE
                AND ADTI.TRACELEVEL = 'Credit Level'),
+----ADDED BY BIN TRACE BACK THE MTD LIFE FYC, MTD A & H FYC, MTD GRP FYC
+----ADDED END
+           (MTD_LIFE_FYC,
+            MTD_AH_FYC,
+            MTD_GRP_FYC) =
+           (SELECT NVL(SUM(CASE
+                            WHEN ADTI.SMEASUREMENTNAME = 'SM_DO_Base_BN' 
+                              AND ADTI.GENERICATTRIBUTE2 IN ('LF')
+                            THEN
+                              ADTI.CREDITVALUE
+                            ELSE
+                              0
+                           END),
+                       0),
+                   NVL(SUM(CASE
+                             WHEN ADTI.SMEASUREMENTNAME = 'SM_DO_Base_BN' 
+                              AND ADTI.GENERICATTRIBUTE2 IN ('PA')
+                             THEN
+                              ADTI.CREDITVALUE
+                             ELSE
+                              0
+                           END),
+                       0),
+                   NVL(SUM(CASE
+                             WHEN ADTI.SMEASUREMENTNAME = 'SM_DO_Base_BN'
+                               AND ADTI.GENERICATTRIBUTE2 IN ('CS', 'CL') 
+                             THEN
+                              ADTI.CREDITVALUE
+                             ELSE
+                              0
+                           END),
+                       0)
+              FROM AIA_DEPOSIT_TRACE_INFOR ADTI
+             WHERE ADTI.POSITIONSEQ = ADOA.POSITIONSEQ
+               AND ADTI.PERIODSEQ = ADOA.PERIODSEQ
+               AND ADTI.DEPOSITNAME = 'D_Direct_Override_BN'
+               AND ADTI.TRACELEVEL = 'Credit Level'
+            ), 
            UPDATE_DATE = SYSDATE
      WHERE ADOA.PERIODSEQ = V_PERIODSEQ;
   
@@ -4024,7 +4079,15 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                ADOA.AGENT_CODE,
                ADOA.AGENT_NAME,
                ADOA.CONTRACT_DATE,
-               0,
+--modified by bin update the latest contract month 20140825
+               --contract month
+               --0,
+               (SELECT NVL(SUM(MEA.VALUE), 0)
+                      FROM CS_MEASUREMENT MEA
+               WHERE MEA.PERIODSEQ = V_PERIODSEQ
+               AND MEA.POSITIONSEQ = ADOA.POSITIONSEQ
+               AND MEA.NAME = 'SM_Contract_Month'),
+--modified end                     
                ADOA.CLASS,
                ADOA.AGENT_STATUS_CODE,
                ADOA.TERMINATION_DATE,
@@ -4178,7 +4241,15 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                ADOL.AGENT_CODE,
                ADOL.AGENT_NAME,
                ADOL.CONTRACT_DATE,
-               0,
+--modified by bin update the latest contract month 20140825
+               --contract month
+               --0,
+               (SELECT NVL(SUM(MEA.VALUE), 0)
+                      FROM CS_MEASUREMENT MEA
+               WHERE MEA.PERIODSEQ = V_PERIODSEQ
+               AND MEA.POSITIONSEQ = ADOL.POSITIONSEQ
+               AND MEA.NAME = 'SM_Contract_Month'),
+--modified end
                ADOL.CLASS,
                ADOL.AGENT_STATUS_CODE,
                ADOL.TERMINATION_DATE,
@@ -6130,11 +6201,12 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
              UPDATE_DATE         = SYSDATE
        WHERE AA.PERIODSEQ = V_PERIODSEQ;
     END IF;
-    ------Update YTD_AOR Field
+----removed by zhubin update them at last
+   /* ------Update YTD_AOR Field
     UPDATE AIA_AOR AA
        SET (AA.YTD_PIB_AOR, AA.YTD_REN_COMM_AOR) =
-           (SELECT NVL(MAX(MEA.GENERICNUMBER1), 0.02) * AA.YTD_PIB,
-                   NVL(MAX(MEA.GENERICNUMBER2), 0.03) * AA.YTD_RENEWAL_COMM
+           (SELECT NVL(MAX(MEA.GENERICNUMBER1), 0.02) * AA.YTD_PIB, --modified by bin change to 0.02
+                   NVL(MAX(MEA.GENERICNUMBER2), 0.03) * AA.YTD_RENEWAL_COMM  --modified by bin change to 0.03
               FROM CS_MEASUREMENT MEA
              WHERE MEA.NAME = 'SM_AOR_DM_Annual_SG'
                AND MEA.PERIODSEQ = V_PERIODSEQ
@@ -6145,7 +6217,8 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
     UPDATE AIA_AOR AA
        SET AA.TOTAL_AOR = AA.YTD_PIB_AOR + AA.YTD_REN_COMM_AOR,
            UPDATE_DATE  = SYSDATE
-     WHERE AA.PERIODSEQ = V_PERIODSEQ;
+     WHERE AA.PERIODSEQ = V_PERIODSEQ;*/
+----remove end
     ------Insert Last Period YTD Record
     IF MOD(EXTRACT(MONTH FROM V_PERIODSTARTDATE), 12) > 0 THEN
       INSERT INTO AIA_AOR
@@ -6227,6 +6300,24 @@ CREATE OR REPLACE PACKAGE BODY AIA_SINGAPORE_REPORT_PKG IS
                  WHERE T.PERIODSEQ = V_PERIODSEQ
                    AND (T.DM_CODE = AA.DM_CODE OR T.UM_CODE = AA.UM_CODE)
                    AND T.FSC_AGT_CODE = AA.FSC_AGT_CODE);
+----added by zhubin update at end 20140822
+    ------Update YTD_AOR Field
+    UPDATE AIA_AOR AA
+       SET (AA.YTD_PIB_AOR, AA.YTD_REN_COMM_AOR) =
+           (SELECT NVL(MAX(MEA.GENERICNUMBER1), 0.02) * AA.YTD_PIB, --modified by bin change to 0.02
+                   NVL(MAX(MEA.GENERICNUMBER2), 0.03) * AA.YTD_RENEWAL_COMM  --modified by bin change to 0.03
+              FROM CS_MEASUREMENT MEA
+             WHERE MEA.NAME = 'SM_AOR_DM_Annual_SG'
+               AND MEA.PERIODSEQ = V_PERIODSEQ
+               AND MEA.POSITIONSEQ = AA.POSITIONSEQ),
+           UPDATE_DATE = SYSDATE
+     WHERE AA.PERIODSEQ = V_PERIODSEQ;
+    ------Update AOR Total Field
+    UPDATE AIA_AOR AA
+       SET AA.TOTAL_AOR = AA.YTD_PIB_AOR + AA.YTD_REN_COMM_AOR,
+           UPDATE_DATE  = SYSDATE
+     WHERE AA.PERIODSEQ = V_PERIODSEQ;
+--added end
     END IF;
     COMMIT;
   EXCEPTION
