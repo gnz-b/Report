@@ -1,0 +1,445 @@
+CREATE OR REPLACE PACKAGE "RPT_BRU_AGY_PKG" IS
+	C_REMOVEDATE DATE := TO_DATE( '2200-01-01', 'YYYY-MM-DD' );
+
+	V_ERROR_CODE	VARCHAR2( 255 );
+	V_ERROR_MESSAGE	VARCHAR2( 255 );
+
+	PROCEDURE ERROR_LOGGING;
+	PROCEDURE INIT;
+  PROCEDURE INIT(P_PERIOD IN VARCHAR2);
+	
+	PROCEDURE GET_PM_LIVE_COUNT( 
+		V_PERIODSEQ		IN	CS_PERIOD.PERIODSEQ%TYPE,
+		V_POSITIONSEQ	IN	RPT_BRUAGY_NAB_TEMP.POSITIONSEQ%TYPE,
+		nValue			OUT	NUMBER
+	);
+	
+	PROCEDURE RPT_NEW_AGENT_BONUS;
+	PROCEDURE RPT_POPULATE_ALL;
+  PROCEDURE RPT_POPULATE_ALL(P_PERIOD IN VARCHAR2);
+END;
+/
+CREATE OR REPLACE PACKAGE BODY "RPT_BRU_AGY_PKG" IS
+	------position version start date always equal to participant
+	------position latest version end date always equal to end of time
+	------position terminated status is updated on participant
+	V_CALENDARNAME		CS_CALENDAR.NAME%TYPE;
+	V_PERIODSEQ			CS_PERIOD.PERIODSEQ%TYPE;
+	V_PERIODNAME		CS_PERIOD.NAME%TYPE;
+	V_PERIODSTARTDATE	CS_PERIOD.STARTDATE%TYPE;
+	V_PERIODENDDATE		CS_PERIOD.ENDDATE%TYPE;
+	V_CALENDARSEQ		CS_CALENDAR.CALENDARSEQ%TYPE;
+	V_PERIODTYPESEQ		CS_PERIODTYPE.PERIODTYPESEQ%TYPE;
+	------the prior period
+	V_PRIOR_PERIODSEQ	CS_PERIOD.PERIODSEQ%TYPE;
+	
+	-- Other variables
+	nCount				NUMBER;
+	dCycleDate			DATE;
+
+	
+	PROCEDURE ERROR_LOGGING IS BEGIN
+		V_ERROR_CODE    := SQLCODE;
+		V_ERROR_MESSAGE := SQLERRM;
+		INSERT INTO AIA_ERROR_MESSAGE( RECORDNO, ERRORCODE, ERRORMESSAGE, ERRORBACKTRACE, CREATEDATE )
+		VALUES( AIA_ERROR_MESSAGE_S.NEXTVAL, V_ERROR_CODE, V_ERROR_MESSAGE, DBMS_UTILITY.FORMAT_ERROR_BACKTRACE, SYSDATE );
+		COMMIT;
+	EXCEPTION
+	WHEN OTHERS THEN
+		NULL;
+	END;
+	
+	PROCEDURE INIT IS BEGIN
+		SELECT PERD.PERIODSEQ, CAL.CALENDARSEQ, CAL.NAME, PERT.PERIODTYPESEQ, PERD.NAME, PERD.STARTDATE, PERD.ENDDATE
+		INTO V_PERIODSEQ, V_CALENDARSEQ, V_CALENDARNAME, V_PERIODTYPESEQ, V_PERIODNAME, V_PERIODSTARTDATE, V_PERIODENDDATE
+		FROM CS_PERIOD PERD, CS_PERIODTYPE PERT, CS_CALENDAR CAL
+		WHERE PERD.CALENDARSEQ = CAL.CALENDARSEQ
+				AND PERD.PERIODTYPESEQ = PERT.PERIODTYPESEQ
+				AND PERD.REMOVEDATE = C_REMOVEDATE
+				AND PERT.REMOVEDATE = C_REMOVEDATE
+				AND CAL.REMOVEDATE = C_REMOVEDATE
+				AND CAL.NAME = 'AIA Singapore Calendar'
+				--@TODO: May need to change this portion
+				AND UPPER( PERD.NAME ) = ( SELECT TRIM( TO_CHAR( TO_DATE( txt_key_value, 'YYYY-MM-DD' ), 'MONTH' ) ) 
+											|| ' ' || TO_CHAR( TO_DATE( txt_key_value, 'YYYY-MM-DD' ),'YYYY' )
+											FROM in_etl_control
+											WHERE txt_key_string = 'OPER_CYCLE_DATE'
+											AND TXT_FILE_NAME = 'GLOBAL'
+										);
+				/*
+				AND UPPER( PERD.NAME ) = ( SELECT TRIM( TO_CHAR( TO_DATE( txt_key_value, 'YYYY-MM-DD' ), 'MONTH' ) ) 
+											|| ' ' || TO_CHAR( TO_DATE( txt_key_value, 'YYYY-MM-DD' ),'YYYY' )
+											FROM in_etl_control
+											WHERE txt_key_string = 'CYCLE_DATE'
+											AND TXT_FILE_NAME = 'REPORT'
+										);
+				*/
+				
+		--get prior period key
+		SELECT PERD.PERIODSEQ
+		INTO V_PRIOR_PERIODSEQ
+		FROM CS_PERIOD PERD
+		WHERE PERD.REMOVEDATE = C_REMOVEDATE
+				AND PERD.CALENDARSEQ = V_CALENDARSEQ
+				AND PERD.PERIODTYPESEQ = V_PERIODTYPESEQ
+				AND PERD.ENDDATE = V_PERIODSTARTDATE;			
+
+		DBMS_OUTPUT.PUT_LINE( 'V_PERIODSEQ: ' || V_PERIODSEQ );
+		DBMS_OUTPUT.PUT_LINE( 'V_CALENDARSEQ: ' || V_CALENDARSEQ );
+		DBMS_OUTPUT.PUT_LINE( 'V_CALENDARNAME: ' || V_CALENDARNAME );
+		DBMS_OUTPUT.PUT_LINE( 'V_PERIODTYPESEQ: ' || V_PERIODTYPESEQ );
+		DBMS_OUTPUT.PUT_LINE( 'V_PERIODNAME: ' || V_PERIODNAME );
+		DBMS_OUTPUT.PUT_LINE( 'V_PERIODSTARTDATE: ' || V_PERIODSTARTDATE );
+		DBMS_OUTPUT.PUT_LINE( 'V_PERIODENDDATE: ' || V_PERIODENDDATE );
+		DBMS_OUTPUT.PUT_LINE( 'V_PRIOR_PERIODSEQ: ' || V_PRIOR_PERIODSEQ );
+	EXCEPTION
+	WHEN OTHERS THEN
+		ERROR_LOGGING;
+	END;
+  
+  PROCEDURE INIT(P_PERIOD IN VARCHAR2) IS
+  BEGIN
+		SELECT PERD.PERIODSEQ, CAL.CALENDARSEQ, CAL.NAME, PERT.PERIODTYPESEQ, PERD.NAME, PERD.STARTDATE, PERD.ENDDATE
+		INTO V_PERIODSEQ, V_CALENDARSEQ, V_CALENDARNAME, V_PERIODTYPESEQ, V_PERIODNAME, V_PERIODSTARTDATE, V_PERIODENDDATE
+		FROM CS_PERIOD PERD, CS_PERIODTYPE PERT, CS_CALENDAR CAL
+		WHERE PERD.CALENDARSEQ = CAL.CALENDARSEQ
+				AND PERD.PERIODTYPESEQ = PERT.PERIODTYPESEQ
+				AND PERD.REMOVEDATE = C_REMOVEDATE
+				AND PERT.REMOVEDATE = C_REMOVEDATE
+				AND CAL.REMOVEDATE = C_REMOVEDATE
+				AND CAL.NAME = 'AIA Singapore Calendar'
+				--@TODO: May need to change this portion
+				AND UPPER( PERD.NAME ) = ( SELECT TRIM( TO_CHAR( TO_DATE( P_PERIOD, 'YYYY-MM-DD' ), 'MONTH' ) ) 
+											|| ' ' || TO_CHAR( TO_DATE( P_PERIOD, 'YYYY-MM-DD' ),'YYYY' )
+											FROM in_etl_control
+											WHERE txt_key_string = 'OPER_CYCLE_DATE'
+											AND TXT_FILE_NAME = 'GLOBAL'
+										);
+				/*
+				AND UPPER( PERD.NAME ) = ( SELECT TRIM( TO_CHAR( TO_DATE( txt_key_value, 'YYYY-MM-DD' ), 'MONTH' ) ) 
+											|| ' ' || TO_CHAR( TO_DATE( txt_key_value, 'YYYY-MM-DD' ),'YYYY' )
+											FROM in_etl_control
+											WHERE txt_key_string = 'CYCLE_DATE'
+											AND TXT_FILE_NAME = 'REPORT'
+										);
+				*/
+				
+		--get prior period key
+		SELECT PERD.PERIODSEQ
+		INTO V_PRIOR_PERIODSEQ
+		FROM CS_PERIOD PERD
+		WHERE PERD.REMOVEDATE = C_REMOVEDATE
+				AND PERD.CALENDARSEQ = V_CALENDARSEQ
+				AND PERD.PERIODTYPESEQ = V_PERIODTYPESEQ
+				AND PERD.ENDDATE = V_PERIODSTARTDATE;			
+
+		DBMS_OUTPUT.PUT_LINE( 'V_PERIODSEQ: ' || V_PERIODSEQ );
+		DBMS_OUTPUT.PUT_LINE( 'V_CALENDARSEQ: ' || V_CALENDARSEQ );
+		DBMS_OUTPUT.PUT_LINE( 'V_CALENDARNAME: ' || V_CALENDARNAME );
+		DBMS_OUTPUT.PUT_LINE( 'V_PERIODTYPESEQ: ' || V_PERIODTYPESEQ );
+		DBMS_OUTPUT.PUT_LINE( 'V_PERIODNAME: ' || V_PERIODNAME );
+		DBMS_OUTPUT.PUT_LINE( 'V_PERIODSTARTDATE: ' || V_PERIODSTARTDATE );
+		DBMS_OUTPUT.PUT_LINE( 'V_PERIODENDDATE: ' || V_PERIODENDDATE );
+		DBMS_OUTPUT.PUT_LINE( 'V_PRIOR_PERIODSEQ: ' || V_PRIOR_PERIODSEQ );
+	EXCEPTION
+	WHEN OTHERS THEN
+		ERROR_LOGGING;
+	END;
+
+	PROCEDURE RPT_NEW_AGENT_BONUS IS 
+		CURSOR POSITIONSEQ_Cur IS
+			SELECT POSITIONSEQ
+			FROM RPT_BRUAGY_NAB_TEMP;
+		
+		V_POSITIONSEQ	RPT_BRUAGY_NAB_TEMP.POSITIONSEQ%TYPE;
+		V_SALESTXNSEQ	CS_CREDIT.SALESTRANSACTIONSEQ%TYPE;
+		
+	BEGIN  
+		/*
+			Delete same cycle date if re-run multiple times for same period
+		*/
+		nCount := 0;
+		SELECT COUNT( * ) INTO nCount
+		FROM  RPT_BRUAGY_NEW_AGENT_BONUS
+		WHERE PERIODSEQ = V_PERIODSEQ;
+		DBMS_OUTPUT.PUT_LINE( 'Before Delete RPT_BRUAGY_NEW_AGENT_BONUS: ' || V_PERIODSEQ || ' ' || nCount );
+		EXECUTE IMMEDIATE 'DELETE FROM RPT_BRUAGY_NEW_AGENT_BONUS WHERE PERIODSEQ = ' || V_PERIODSEQ;
+		
+		/*
+			Eligible to receive NAB for 1st 6 contract months only
+			- Agent join before or on 4 of the month then check using 6 months between hire date and business date
+			- Agent join after 4 of the month then check using 7 months between hire date and business date
+		*/
+		INSERT INTO RPT_BRUAGY_NAB_TEMP( POSITIONSEQ )
+		SELECT	POSITIONSEQ
+		FROM	RPT_MASTER_AGENT mtagent
+		WHERE	mtagent.PERIODSEQ = V_PERIODSEQ
+				AND mtagent.businessunit = 'BRUAGY'
+				AND mtagent.positionname like '%T%'
+				AND( ( TO_NUMBER( SUBSTR( mtagent.STR_CONTRACT_DATE, 4, 2 ) ) >= 1 
+						AND TO_NUMBER( SUBSTR( mtagent.STR_CONTRACT_DATE, 4, 2 ) ) <= 4 
+						AND mtagent.LEN_OF_SERVICE_IN_MTH >= 0 AND mtagent.LEN_OF_SERVICE_IN_MTH <= 6
+					  )	OR (
+						TO_NUMBER( SUBSTR( mtagent.str_contract_date, 4, 2 ) ) >= 5
+						AND mtagent.LEN_OF_SERVICE_IN_MTH >= 0 AND mtagent.LEN_OF_SERVICE_IN_MTH <= 7
+					  )
+					);
+		nCount := 0;
+		SELECT COUNT( * ) INTO nCount
+		FROM  RPT_BRUAGY_NAB_TEMP;
+		DBMS_OUTPUT.PUT_LINE( 'Inserted ' || nCount || ' records into RPT_BRUAGY_NAB_TEMP...' );
+		IF( nCount <= 0 ) THEN        
+			DBMS_OUTPUT.PUT_LINE( '0 Records in RPT_BRUAGY_NAB_TEMP. No need to populate data to RPT_BRUAGY_NEW_AGENT_BONUS. Exiting...' );
+			RETURN;
+		END IF;
+		
+		/*
+			Display FYC Brunei Dollars
+		*/
+		OPEN POSITIONSEQ_Cur;
+		LOOP
+			FETCH POSITIONSEQ_Cur INTO V_POSITIONSEQ;
+			EXIT WHEN POSITIONSEQ_Cur%NOTFOUND;
+			
+			nCount := 0;
+			SELECT COUNT( * ) INTO nCount
+			FROM	CS_CREDIT c LEFT JOIN CS_CREDITTYPE ct ON ct.REMOVEDATE = C_REMOVEDATE AND c.CREDITTYPESEQ = ct.DATATYPESEQ
+					LEFT JOIN RPT_MASTER_AGENT mtagent ON mtagent.PERIODSEQ = V_PERIODSEQ AND c.POSITIONSEQ = mtagent.POSITIONSEQ
+					LEFT JOIN CS_SALESTRANSACTION txn ON c.SALESTRANSACTIONSEQ = txn.SALESTRANSACTIONSEQ
+			WHERE	c.PERIODSEQ = V_PERIODSEQ
+					AND ct.CREDITTYPEID IN( 'FYC', 'Case_Count' )
+					AND c.POSITIONSEQ = V_POSITIONSEQ
+					AND c.GENERICATTRIBUTE2 IN( 'LF', 'PA', 'CS', 'CL' );
+			
+			IF( nCount > 0 ) THEN
+				DBMS_OUTPUT.PUT_LINE( 'It will insert ' || nCount || ' records to RPT_BRUAGY_NEW_AGENT_BONUS for V_POSITIONSEQ - ' || V_POSITIONSEQ );
+				INSERT INTO RPT_BRUAGY_NEW_AGENT_BONUS( PERIODSEQ, CYCLEDATE, PERIODNAME, PARTICIPANTSEQ, POSITIONSEQ, 
+							CREDITSEQ, SALESTXNSEQ, COMPENSATIONDATE, CREDITTYPEID, 
+							POSITIONNAME, AGENT_CODE, AGENT_NAME, 
+							CONTRACT_DATE, STR_CONTRACT_DATE, CONTRACT_MONTH,
+							AGENCY_CODE, AGENCY_NAME, AGENCY_LEADER_CODE, AGENCY_LEADER_NAME, LEN_OF_SERVICE_IN_MTH,  
+							POLICY_NO, POLICY_ISSUE_DATE, PRODUCT_TYPE, INSURED_NRIC, INSURED_NAME, POLICY_CURRENCY, LOCAL_CURRENCY, 
+							LIFE_CASES, PA_CASES, LIVES, LIFE_FYC, PA_FYC, GRP_FYC, PAYMENT_GROUP )
+				SELECT	mtagent.PERIODSEQ, mtagent.CYCLEDATE, mtagent.PERIODNAME, c.PAYEESEQ, c.POSITIONSEQ, 
+						c.CREDITSEQ, c.SALESTRANSACTIONSEQ, c.COMPENSATIONDATE, ct.CREDITTYPEID, 
+						mtagent.POSITIONNAME, mtagent.AGT_AGY_CODE, mtagent.AGT_AGY_NAME, 
+----Modified by zhubin 	20140915 contract_month means the time lasts
+            mtagent.CONTRACT_DATE, mtagent.STR_CONTRACT_DATE, --mtagent.CONTRACT_MONTH,
+            CASE
+              WHEN ( TO_NUMBER( SUBSTR( mtagent.STR_CONTRACT_DATE, 4, 2 ) ) >= 1 and TO_NUMBER( SUBSTR( mtagent.STR_CONTRACT_DATE, 4, 2 ) ) <= 4) THEN
+                mtagent.len_of_service_in_mth + 1
+              ELSE  
+                mtagent.len_of_service_in_mth
+            END AS CONTRACT_MONTH,     
+----Modified end
+						mtagent.UNIT_CODE, mtagent.UNIT_NAME, mtagent.UNIT_LEADER_CODE, mtagent.UNIT_LEADER_NAME, mtagent.LEN_OF_SERVICE_IN_MTH, 
+						c.GENERICATTRIBUTE6, TO_CHAR( c.GENERICDATE2, 'MM/DD/YYYY' ), c.GENERICATTRIBUTE2, txn.GENERICATTRIBUTE24, c.GENERICATTRIBUTE10, c.GENERICATTRIBUTE5, 'BND', 
+						CASE 
+							WHEN( ct.CREDITTYPEID = 'Case_Count' AND c.GENERICATTRIBUTE2 = 'LF' ) THEN c.VALUE
+							ELSE 0
+						END AS LIFE_CASES,
+						CASE 
+							WHEN( ct.CREDITTYPEID = 'Case_Count' AND c.GENERICATTRIBUTE2 = 'PA' ) THEN c.VALUE * 0.5
+							ELSE 0
+						END AS PA_CASES, 
+						0, 
+						CASE 
+							WHEN( ct.CREDITTYPEID = 'FYC' AND c.GENERICATTRIBUTE2 = 'LF' ) THEN c.VALUE
+							ELSE 0
+						END AS LIFE_FYC,
+						CASE 
+							WHEN( ct.CREDITTYPEID = 'FYC' AND c.GENERICATTRIBUTE2 = 'PA' ) THEN c.VALUE
+							ELSE 0
+						END AS PA_FYC,
+						CASE 
+							WHEN( ct.CREDITTYPEID = 'FYC' AND c.GENERICATTRIBUTE2 = 'CL' ) THEN c.VALUE
+							ELSE 0
+						END AS GRP_FYC,
+----Modified by zhubin for replacing the service in mth with CREDIT compensation date 						
+            /*CASE 
+							WHEN( TO_NUMBER( SUBSTR( mtagent.STR_CONTRACT_DATE, 4, 2 ) ) >= 1 
+									AND TO_NUMBER( SUBSTR( mtagent.STR_CONTRACT_DATE, 4, 2 ) ) <= 4  
+									AND mtagent.LEN_OF_SERVICE_IN_MTH >= 0 AND mtagent.LEN_OF_SERVICE_IN_MTH <= 3 ) THEN '1'
+							WHEN( TO_NUMBER( SUBSTR( mtagent.STR_CONTRACT_DATE, 4, 2 ) ) >= 1 
+									AND TO_NUMBER( SUBSTR( mtagent.STR_CONTRACT_DATE, 4, 2 ) ) <= 4  
+									AND mtagent.LEN_OF_SERVICE_IN_MTH >= 4 AND mtagent.LEN_OF_SERVICE_IN_MTH <= 6 ) THEN '2'
+							-- Possible LEN_OF_SERVICE_IN_MTH values are 0 and 1. It can happen for same month between hire and cycle date 
+							-- e.g. hire date = 4 March (result 1) or 17 March (result 0) and cycle date = 31 March
+							WHEN( TO_NUMBER( SUBSTR( mtagent.str_contract_date, 4, 2 ) ) >= 5
+									AND mtagent.LEN_OF_SERVICE_IN_MTH >= 0 AND mtagent.LEN_OF_SERVICE_IN_MTH <= 4 ) THEN '1'
+							WHEN( TO_NUMBER( SUBSTR( mtagent.str_contract_date, 4, 2 ) ) >= 5
+									AND mtagent.LEN_OF_SERVICE_IN_MTH >= 5 AND mtagent.LEN_OF_SERVICE_IN_MTH <= 7 ) THEN '2'
+						END AS PAYMENT_GROUP*/
+            /*CASE
+              WHEN ((TO_NUMBER(SUBSTR(mtagent.str_contract_date, 4, 2))) between 1 and 4
+               AND (EXTRACT(MONTH FROM C.COMPENSATIONDATE) - TO_NUMBER(SUBSTR(mtagent.contract_date, 1, 2))) BETWEEN 0 AND 2) 
+              THEN '1'
+              WHEN ((TO_NUMBER(SUBSTR(mtagent.str_contract_date, 4, 2))) between 1 and 4
+               AND (EXTRACT(MONTH FROM C.COMPENSATIONDATE) - TO_NUMBER(SUBSTR(mtagent.contract_date, 1, 2))) > 2 
+               AND (EXTRACT(MONTH FROM C.COMPENSATIONDATE) - TO_NUMBER(SUBSTR(mtagent.contract_date, 1, 2))) <= 5)
+              THEN '2'
+              WHEN ((TO_NUMBER(SUBSTR(mtagent.str_contract_date, 4, 2))) > 4
+               AND (EXTRACT(MONTH FROM C.COMPENSATIONDATE) - TO_NUMBER(SUBSTR(mtagent.contract_date, 1, 2))) BETWEEN 0 AND 3)
+              THEN '1'
+              WHEN ((TO_NUMBER(SUBSTR(mtagent.str_contract_date, 4, 2))) > 4
+               AND (EXTRACT(MONTH FROM C.COMPENSATIONDATE) - TO_NUMBER(SUBSTR(mtagent.contract_date, 1, 2))) > 3
+               AND (EXTRACT(MONTH FROM C.COMPENSATIONDATE) - TO_NUMBER(SUBSTR(mtagent.contract_date, 1, 2)))<= 6)
+              THEN '2'
+            END AS PAYMENT_GROUP*/
+            CASE
+              WHEN (MONTHS_BETWEEN(LAST_DAY(C.COMPENSATIONDATE), LAST_DAY(MTAGENT.CONTRACT_DATE - 4)) BETWEEN 0 AND 3)
+                THEN
+                  '1'
+              WHEN (MONTHS_BETWEEN(LAST_DAY(C.COMPENSATIONDATE), LAST_DAY(MTAGENT.CONTRACT_DATE - 4)) BETWEEN 4 AND 6)
+                THEN
+                  '2'
+            END                    
+----Modified end            
+				FROM	CS_CREDIT c LEFT JOIN CS_CREDITTYPE ct ON ct.REMOVEDATE = C_REMOVEDATE AND c.CREDITTYPESEQ = ct.DATATYPESEQ
+						LEFT JOIN RPT_MASTER_AGENT mtagent ON mtagent.PERIODSEQ = V_PERIODSEQ AND c.POSITIONSEQ = mtagent.POSITIONSEQ
+						LEFT JOIN CS_SALESTRANSACTION txn ON c.SALESTRANSACTIONSEQ = txn.SALESTRANSACTIONSEQ
+				WHERE	c.PERIODSEQ = V_PERIODSEQ
+						AND ct.CREDITTYPEID IN( 'FYC', 'Case_Count' )
+						AND c.VALUE != 0
+						AND c.POSITIONSEQ = V_POSITIONSEQ
+						AND c.GENERICATTRIBUTE2 IN( 'LF', 'PA', 'CS', 'CL' );			
+						
+				UPDATE	RPT_BRUAGY_NEW_AGENT_BONUS rpt
+				SET	PAYMENT_VALUE = ( SELECT i.VALUE
+										FROM	CS_INCENTIVE i 
+										WHERE	i.PERIODSEQ = V_PERIODSEQ AND i.POSITIONSEQ = V_POSITIONSEQ
+										AND i.NAME = 'I_NAB_Month_3_BN' )
+				WHERE	rpt.PERIODSEQ = V_PERIODSEQ AND rpt.POSITIONSEQ = V_POSITIONSEQ
+						AND rpt.PAYMENT_GROUP = '1';
+
+				UPDATE	RPT_BRUAGY_NEW_AGENT_BONUS rpt
+				SET	PAYMENT_VALUE = ( SELECT i.VALUE
+										FROM	CS_INCENTIVE i 
+										WHERE	i.PERIODSEQ = V_PERIODSEQ AND i.POSITIONSEQ = V_POSITIONSEQ
+										AND i.NAME = 'I_NAB_Month_6_BN' )
+				WHERE	rpt.PERIODSEQ = V_PERIODSEQ AND rpt.POSITIONSEQ = V_POSITIONSEQ
+						AND rpt.PAYMENT_GROUP = '2';
+
+				GET_PM_LIVE_COUNT( V_PERIODSEQ, V_POSITIONSEQ, nCount );
+				UPDATE	RPT_BRUAGY_NEW_AGENT_BONUS rpt
+				SET	LIVES = nCount
+				WHERE	rpt.PERIODSEQ = V_PERIODSEQ 
+						AND rpt.POSITIONSEQ = V_POSITIONSEQ
+						AND rpt.CREDITTYPEID = 'FYC'
+						AND rpt.CREDITSEQ = ( SELECT MAX( CREDITSEQ )
+												FROM RPT_BRUAGY_NEW_AGENT_BONUS tmp1
+												WHERE tmp1.PERIODSEQ = V_PERIODSEQ 
+												AND tmp1.POSITIONSEQ = V_POSITIONSEQ
+												AND tmp1.CREDITTYPEID = 'FYC'
+											);
+
+				/*
+				UPDATE	RPT_BRUAGY_NEW_AGENT_BONUS rpt
+				SET	LIVES = ( SELECT m.VALUE
+								FROM CS_MEASUREMENT m
+								WHERE	m.PERIODSEQ = V_PERIODSEQ AND m.POSITIONSEQ = V_POSITIONSEQ
+								AND m.NAME = 'PM_LIVE_COUNT_BN' )
+				WHERE	rpt.PERIODSEQ = V_PERIODSEQ AND rpt.POSITIONSEQ = V_POSITIONSEQ;
+				*/
+			END IF;
+			
+		END LOOP;
+		CLOSE POSITIONSEQ_Cur;
+		
+	EXCEPTION
+	WHEN OTHERS THEN
+		ERROR_LOGGING;
+	END;
+	
+	PROCEDURE GET_PM_LIVE_COUNT( 
+		V_PERIODSEQ		IN	CS_PERIOD.PERIODSEQ%TYPE,
+		V_POSITIONSEQ	IN	RPT_BRUAGY_NAB_TEMP.POSITIONSEQ%TYPE,
+		nValue			OUT	NUMBER
+	) IS 
+	BEGIN
+		SELECT	m.VALUE INTO nValue
+		FROM	CS_MEASUREMENT m
+		WHERE	m.PERIODSEQ = V_PERIODSEQ AND m.POSITIONSEQ = V_POSITIONSEQ
+				AND m.NAME = 'PM_LIVE_COUNT_BN';
+	EXCEPTION
+	WHEN TOO_MANY_ROWS THEN
+		nValue := 0;
+	WHEN NO_DATA_FOUND THEN
+		nValue := 0;
+	WHEN OTHERS THEN
+		ERROR_LOGGING;
+	END;
+	
+	PROCEDURE RPT_POPULATE_ALL IS BEGIN  
+		INIT;
+		------
+		RPT_NEW_AGENT_BONUS;
+		------
+		COMMIT;  
+	EXCEPTION
+	WHEN OTHERS THEN
+		NULL;
+	END;
+  
+  PROCEDURE RPT_POPULATE_ALL(P_PERIOD IN VARCHAR2) IS BEGIN  
+		INIT(P_PERIOD);
+		------
+		RPT_NEW_AGENT_BONUS;
+		------
+		COMMIT;  
+	EXCEPTION
+	WHEN OTHERS THEN
+		NULL;
+	END;
+BEGIN
+	DBMS_OUTPUT.PUT_LINE( 'Init...' );
+	
+	/*
+		select * from RPT_MASTER_AGENT
+		order by businessunit, district_code, unit_code, positionname;
+		
+		BEGIN
+			RPT_BRU_AGY_PKG.RPT_POPULATE_ALL;
+		END;
+		
+		update cs_participant
+		set hiredate = TO_DATE( '04-09-1999', 'DD-MM-YYYY' )
+		where removedate = TO_DATE( '2200-01-01', 'YYYY-MM-DD' ) and payeeseq in( 4503599627370844, 4503599627370845, 4503599627370842 );
+
+		update cs_participant
+		set hiredate = TO_DATE( '04-12-1999', 'DD-MM-YYYY' )
+		where removedate = TO_DATE( '2200-01-01', 'YYYY-MM-DD' ) and payeeseq in( 4503599627370846 );
+		update cs_participant
+		set hiredate = TO_DATE( '04-12-1999', 'DD-MM-YYYY' )
+		where removedate = TO_DATE( '2200-01-01', 'YYYY-MM-DD' ) and payeeseq in( 4503599627370843 );
+
+		select *
+		from cs_participant
+		where removedate = TO_DATE( '2200-01-01', 'YYYY-MM-DD' ) and payeeseq in(
+		select payeeseq from cs_position
+		where removedate = TO_DATE( '2200-01-01', 'YYYY-MM-DD' ) and name in ('BRT10600', 'BRT10601','BRT10602', 'BRT10503', 'BRT10500')
+		);
+		
+		select * from aia_error_message
+		where errorbacktrace like '%RPT_BRU_AGY_PKG%';
+		
+		--To check list of periods that have credits under certain agents
+		select distinct c.periodseq, p.name
+		FROM	CS_CREDIT c LEFT JOIN CS_CREDITTYPE ct ON ct.REMOVEDATE = TO_DATE( '2200-01-01', 'YYYY-MM-DD' ) AND c.CREDITTYPESEQ = ct.DATATYPESEQ
+			  left join cs_period p ON c.periodseq = p.periodseq
+		where ct.CREDITTYPEID = 'FYC'
+		and c.GENERICATTRIBUTE2 IN( 'LF', 'PA', 'CS', 'CL' )
+		--and c.periodseq =  2533274790398651
+		and positionseq in (select positionseq from RPT_MASTER_AGENT
+		where periodseq = 2533274790398651 -- Jan 2000
+		and positionname in ('BRT10600', 'BRT10601','BRT10602', 'BRT10503', 'BRT10500') );
+		
+		--NAB verification
+		select distinct agency_code, agent_code, agent_name, contract_date, credittypeid from rpt_bruagy_new_agent_bonus
+		where periodname = 'December 2014'
+		order by agency_code;
+				
+	*/
+
+END;
+/

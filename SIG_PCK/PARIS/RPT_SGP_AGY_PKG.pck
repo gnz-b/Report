@@ -7,6 +7,7 @@ CREATE OR REPLACE PACKAGE "RPT_SGP_AGY_PKG" IS
 	PROCEDURE ERROR_LOGGING;
 	PROCEDURE INIT;
 	
+  
 	PROCEDURE UPD_PAQPB_FRM_CRTBL( 
 		strFieldName	IN VARCHAR2, 
 		strKey			IN VARCHAR2, 
@@ -32,6 +33,10 @@ CREATE OR REPLACE PACKAGE "RPT_SGP_AGY_PKG" IS
 	PROCEDURE RPT_PA_QTR_PRD_BONUS;
 	PROCEDURE RPT_PRD_BENEFIT_FRM_UM;
 	PROCEDURE RPT_POPULATE_ALL;
+  --ADDED BY BIN FOR POPULATION 20140902
+  PROCEDURE INIT(P_PERIODSTARTDATE IN VARCHAR2);
+  PROCEDURE RPT_POPULATE_ALL(P_PERIODSTARTDATE IN VARCHAR2);
+  --ADDED END
 END;
 /
 CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
@@ -132,6 +137,44 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
 		ERROR_LOGGING;
 	END;
 	
+  PROCEDURE INIT(P_PERIODSTARTDATE IN VARCHAR2) IS 
+    sCurrCycleYear		VARCHAR2( 04 );
+		sCurrCycleMonth		VARCHAR2( 02 );
+    BEGIN
+     	SELECT PERD.PERIODSEQ, CAL.CALENDARSEQ, CAL.NAME, PERT.PERIODTYPESEQ, PERD.NAME, PERD.STARTDATE, PERD.ENDDATE, PERD.PARENTSEQ 
+		INTO V_PERIODSEQ, V_CALENDARSEQ, V_CALENDARNAME, V_PERIODTYPESEQ, V_PERIODNAME, V_PERIODSTARTDATE, V_PERIODENDDATE, V_PERIODPARENTSEQ
+		FROM CS_PERIOD PERD, CS_PERIODTYPE PERT, CS_CALENDAR CAL
+		WHERE PERD.CALENDARSEQ = CAL.CALENDARSEQ
+				AND PERD.PERIODTYPESEQ = PERT.PERIODTYPESEQ
+				AND PERD.REMOVEDATE = C_REMOVEDATE
+				AND PERT.REMOVEDATE = C_REMOVEDATE
+				AND CAL.REMOVEDATE = C_REMOVEDATE
+				AND CAL.NAME = 'AIA Singapore Calendar'
+				--@TODO: May need to change this portion
+				AND UPPER( PERD.NAME ) = ( SELECT TRIM( TO_CHAR( TO_DATE( P_PERIODSTARTDATE, 'YYYY-MM-DD' ), 'MONTH' ) ) 
+											|| ' ' || TO_CHAR( TO_DATE( P_PERIODSTARTDATE, 'YYYY-MM-DD' ),'YYYY' )
+											FROM in_etl_control
+											WHERE txt_key_string = 'OPER_CYCLE_DATE'
+											AND TXT_FILE_NAME = 'GLOBAL'
+										);
+		--get prior period key
+		SELECT PERD.PERIODSEQ
+		INTO V_PRIOR_PERIODSEQ
+		FROM CS_PERIOD PERD
+		WHERE PERD.REMOVEDATE = C_REMOVEDATE
+				AND PERD.CALENDARSEQ = V_CALENDARSEQ
+				AND PERD.PERIODTYPESEQ = V_PERIODTYPESEQ
+				AND PERD.ENDDATE = V_PERIODSTARTDATE;	
+
+		--get current cycle date and beginning date of financial year
+		V_CURR_CYCLE_DATE := V_PERIODENDDATE - 1;
+		sCurrCycleMonth := EXTRACT( MONTH FROM V_CURR_CYCLE_DATE );
+		sCurrCycleYear := EXTRACT( YEAR FROM V_CURR_CYCLE_DATE );
+		IF( sCurrCycleMonth != '12' ) THEN
+			sCurrCycleYear := sCurrCycleYear - 1;
+		END IF;
+  END;
+    
 	PROCEDURE RPT_CLERICAL_ALLOWANCE IS 	
 		CURSOR AGENCY_CODE_Cur IS
 			SELECT DISTRICT_CODE, UNIT_CODE
@@ -442,8 +485,10 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
 			
 			nCount := 0;
 			SELECT	COUNT( * ) INTO nCount
-			FROM	CS_CREDIT c
-			WHERE	c.PERIODSEQ = V_PERIODSEQ_IN_QTR;
+			FROM	CS_MEASUREMENT c
+			WHERE	c.PERIODSEQ = V_PERIODSEQ_IN_QTR
+					AND c.NAME IN( 'PM_FYP_PA', 'PM_RYP_PA', 'PM_FYP_PA_Adjusted', 'PM_RYP_PA_Adjusted' )
+					AND c.VALUE <> 0;
       ------Begin Modified by Chao 20140803
 			IF( nCount > 0 ) THEN
 				--UPD_PAQPB_FRM_CRTBL( 'FYP_MTH' || nSeq || '_IN_QTR', '= ''C_FYP''', 'SUM( t.value )', V_PERIODSEQ, V_PERIODSEQ_IN_QTR );
@@ -480,8 +525,10 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
 			
 			nCount := 0;
 			SELECT	COUNT( * ) INTO nCount
-			FROM	CS_CREDIT c
-			WHERE	c.PERIODSEQ = V_LY_PERDSEQ_IN_QTR;
+			FROM	CS_MEASUREMENT c
+			WHERE	c.PERIODSEQ = V_LY_PERDSEQ_IN_QTR
+					AND c.NAME IN( 'PM_FYP_PA', 'PM_RYP_PA', 'PM_FYP_PA_Adjusted', 'PM_RYP_PA_Adjusted' )
+					AND c.VALUE <> 0;
       ------Begin Modified by Chao 20140803
 			IF( nCount > 0 ) THEN
 				--UPD_PAQPB_FRM_CRTBL( 'LY_FYP_RYP_MTH' || nSeq || '_IN_QTR', 'IN( ''C_FYP'', ''C_RYP'' )', 'SUM( t.value )', V_PERIODSEQ, V_LY_PERDSEQ_IN_QTR );
@@ -510,47 +557,106 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
 		-- By right only 1 credit C_PA_Persistency_QTD per agent each month
 		UPDATE	RPT_SGPAGY_PA_QTR_PRD_BONUS rpt
 		SET	PERSISTENCY = 
-----Modified by bin replace the C_PA_Persistency_QTD with C_PA_Bonus_Qualification.GN1
-    (SELECT c.GENERICNUMBER1
-							FROM cs_credit c
-								WHERE c.periodseq = V_PERIODSEQ
-									AND c.name = 'C_PA_Bonus_Qualification'
-									AND rpt.positionseq = c.positionseq)
-    /*( SELECT SUM( c.value )
-							FROM cs_credit c
-								WHERE c.periodseq = V_PERIODSEQ
-									AND c.name = 'C_PA_Persistency_QTD'
-									AND rpt.positionseq = c.positionseq
-								GROUP BY c.positionseq
-							)*/
-		WHERE	rpt.periodseq = V_PERIODSEQ
-				AND rpt.positionseq IN( SELECT DISTINCT c.positionseq
-										FROM	cs_credit c
-										WHERE	c.periodseq = V_PERIODSEQ
-												--AND c.name = 'C_PA_Persistency_QTD'
-												AND c.name = 'C_PA_Bonus_Qualification'
-                        AND rpt.positionseq = c.positionseq
-									);
-----Modified by bin 20140818               
+----Modified by zhubin 20140915 for rule change
+  ----Modified by bin replace the C_PA_Persistency_QTD with C_PA_Bonus_Qualification.GN1
+      /*(SELECT c.GENERICNUMBER1
+                FROM cs_credit c
+                  WHERE c.periodseq = V_PERIODSEQ
+                    AND c.name = 'C_PA_Bonus_Qualification'
+                    AND rpt.positionseq = c.positionseq)
+      \*( SELECT SUM( c.value )
+                FROM cs_credit c
+                  WHERE c.periodseq = V_PERIODSEQ
+                    AND c.name = 'C_PA_Persistency_QTD'
+                    AND rpt.positionseq = c.positionseq
+                  GROUP BY c.positionseq
+                )*\
+      WHERE	rpt.periodseq = V_PERIODSEQ
+          AND rpt.positionseq IN( SELECT DISTINCT c.positionseq
+                      FROM	cs_credit c
+                      WHERE	c.periodseq = V_PERIODSEQ
+                          --AND c.name = 'C_PA_Persistency_QTD'
+                          AND c.name = 'C_PA_Bonus_Qualification'
+                          AND rpt.positionseq = c.positionseq
+                    );*/
+  ----Modified by bin 20140818
+  NVL((select tx.value from 
+          cs_salestransaction tx, 
+          cs_transactionassignment txa,
+          cs_eventtype event,
+          cs_position pos
+   where tx.salestransactionseq = txa.salestransactionseq
+   and   tx.eventtypeseq = event.datatypeseq
+   and   txa.positionname = pos.name
+   and   event.removedate > sysdate
+   and   pos.removedate > sysdate
+   and   V_PERIODENDDATE between pos.effectivestartdate and pos.effectiveenddate - 1
+   and   event.eventtypeid = 'PA'
+   and   tx.productdescription = 'QTD'
+   and   pos.genericattribute4 not in ('PI', 'AOR', 'PI_AOR', 'NADOR_AOR')
+   and   pos.ruleelementownerseq = rpt.positionseq
+   and   tx.compensationdate between V_PERIODSTARTDATE and V_PERIODENDDATE - 1
+   and   tx.value > 0
+   --and   rownum = 1
+   ), 0)
+   where rpt.periodseq = V_PERIODSEQ
+   and rpt.positionseq in (select distinct pos.ruleelementownerseq from 
+          cs_salestransaction tx, 
+          cs_transactionassignment txa,
+          cs_eventtype event,
+          cs_position pos
+   where tx.salestransactionseq = txa.salestransactionseq
+   and   tx.eventtypeseq = event.datatypeseq
+   and   txa.positionname = pos.name
+   and   event.removedate > sysdate
+   and   pos.removedate > sysdate
+   and   V_PERIODENDDATE between pos.effectivestartdate and pos.effectiveenddate - 1
+   and   event.eventtypeid = 'PA'
+   and   tx.productdescription = 'QTD'
+   and   pos.genericattribute4 not in ('PI', 'AOR', 'PI_AOR', 'NADOR_AOR')
+   and   pos.ruleelementownerseq = rpt.positionseq
+   and   tx.compensationdate between V_PERIODSTARTDATE and V_PERIODENDDATE - 1 );
+----Modified end 20140915          
 		UPDATE	RPT_SGPAGY_PA_QTR_PRD_BONUS rpt
 		SET	MEET = ( SELECT CASE 
-								WHEN m.value >= 1 THEN 'Y'
+								WHEN m.value = 1 THEN 'Y'
 								ELSE 'N'
 							END AS MEET
 					FROM	CS_MEASUREMENT m
 					WHERE	m.periodseq = V_PERIODSEQ
 							AND m.name = 'PM_PA_Bonus_Qualification'
-							AND m.value <> 0
-							AND rpt.positionseq = m.positionseq
+							--AND m.value <> 0
+							AND rpt.positionseq = m.positionseq            
+--ADDED BY BIN 20140909            
+  --Modified by bin 20140911            
+              --AND (NVL( (SELECT I.Genericnumber1
+              AND (NVL( (SELECT MAX(I.Genericnumber1)
+  --Modified end                    
+                     FROM CS_INCENTIVE I
+                     WHERE I.PERIODSEQ = V_PERIODSEQ
+                     AND I.POSITIONSEQ = RPT.POSITIONSEQ
+                     AND I.NAME = 'I_PA_Production_Bonus_SG'), 0) <> 0  
+                    /*IS NULL
+                   OR (SELECT I.Genericnumber1 
+                       FROM CS_INCENTIVE I
+                       WHERE I.PERIODSEQ = V_PERIODSEQ
+                       AND I.POSITIONSEQ = RPT.POSITIONSEQ
+                       AND I.NAME = 'I_PA_Productiin_Bonus_SG'
+                       ) <> 0*/                   
+                   )
+--ADDED END                   
 					)
 		WHERE	rpt.periodseq = V_PERIODSEQ
-				AND rpt.positionseq IN( SELECT DISTINCT m.positionseq
+----removed by zhubin 20140908			
+        /*AND rpt.positionseq IN( SELECT DISTINCT m.positionseq
 										FROM	CS_MEASUREMENT m
 										WHERE	m.periodseq = V_PERIODSEQ
 												AND m.name = 'PM_PA_Bonus_Qualification'
 												AND m.value <> 0
 												AND rpt.positionseq = m.positionseq
-									);
+									)*/
+----removed end                  
+                  ;
 		------Begin Modified by Chao at 20140802
 		UPDATE	RPT_SGPAGY_PA_QTR_PRD_BONUS rpt
 		SET	RATE = ( SELECT	max(i.genericnumber1)--i.value
@@ -662,15 +768,13 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
 													'FROM RPT_INIT_HISTORY_LKP t ' ||
 													'WHERE t.PERIODSEQ = ' || periodSeqInQtr || ' AND t.KEY_STR_1 = ''SGPAGY_PAQPB'' ' ||
 															'AND t.KEY_STR_4 ' || strKey || ' ' ||
-															'AND rpt.DISTRICT_CODE = t.KEY_STR_2 ' ||
 															'AND rpt.AGENT_CODE = t.KEY_STR_3 ' || strKey2 || ' ' ||
 												') ' || 
 					'WHERE	PERIODSEQ = ' || rptPeriodSeq || 
-							' AND rpt.AGENT_CODE IN ( SELECT DISTINCT t.KEY_STR_2 ' || 
+							' AND rpt.AGENT_CODE IN ( SELECT DISTINCT t.KEY_STR_3 ' || 
 													'FROM RPT_INIT_HISTORY_LKP t ' || 
 													'WHERE t.PERIODSEQ = ' || periodSeqInQtr || ' AND t.KEY_STR_1 = ''SGPAGY_PAQPB'' ' ||
 															'AND t.KEY_STR_4 ' || strKey || ' ' ||
-															'AND rpt.DISTRICT_CODE = t.KEY_STR_2 ' ||
 															'AND rpt.AGENT_CODE = t.KEY_STR_3 ' || 
 												')';
 		-- DBMS_OUTPUT.PUT_LINE( 'SQL (from Initial Value Setup): ' || strSQL );
@@ -1112,8 +1216,16 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
 		WHERE	
 		pd.PERIODSEQ = V_PERIODSEQ and 
 		dep.PERIODSEQ = pd.PERIODSEQ and
-		dep.NAME in ('D_APF_Payable_SGD_SG','D_API_IFYC_SGD_SG','D_API_SSC_SGD_SG','D_FYC_Initial_Excl_LF_SGD_SG','D_FYC_Initial_LF_SGD_SG',
-		'D_FYC_Non_Initial_Excl_LF_SGD_SG','D_FYC_Non_Initial_LF_SGD_SG','D_RYC_Excl_LF_SGD_SG','D_RYC_LF_SGD_SG','D_SSC_Payable_SGD_SG') and
+		dep.NAME in ('D_APF_Payable_SGD_SG',
+                 'D_API_IFYC_SGD_SG',
+                 'D_API_SSC_SGD_SG',
+                 'D_FYC_Initial_Excl_LF_SGD_SG',
+                 'D_FYC_Initial_LF_SGD_SG',
+		             'D_FYC_Non_Initial_Excl_LF_SGD_SG',
+                 'D_FYC_Non_Initial_LF_SGD_SG',
+                 'D_RYC_Excl_LF_SGD_SG',
+                 'D_RYC_LF_SGD_SG',
+                 'D_SSC_Payable_SGD_SG') and
 		dep.BUSINESSUNITMAP = bus.MASK and
 		bus.NAME IN ('SGPAGY') and
 		dep.DEPOSITSEQ = deppmtrace.DEPOSITSEQ and deppmtrace.MEASUREMENTSEQ = mea.MEASUREMENTSEQ and
@@ -1166,10 +1278,38 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
 		WHERE	
 		pd.PERIODSEQ = V_PERIODSEQ and 
 		dep.PERIODSEQ = pd.PERIODSEQ and
-		dep.NAME in ('D_Clerical_Allowance_SG','D_DPI_SG','D_Daily_Ad_Hoc_Before_Tax','D_FSAD_Self_Override_SG','D_M_BEFORE_TAX_SG','D_Monthly_Allowance_SG',
-		'D_NADOR_SG','D_NLPI_SG','D_OPI_First_Year_SG','D_OPI_Renewal_SG','D_PA_Production_Bonus_SG','D_PBA_SG','D_PBU_Buyout_SG','D_PBU_Monthly_SG',
-		'D_PI_UM_SG','D_PI_FSD_SG','D_PLOR_SG','D_PL_Year_End_Bonus','D_Productivity_Allowance_SG','D_SPI_SG','D_VLOR_SG','D_MD_Distribution_SG',
-		'D_ADPI_SG','D_AOR_SG','D_PARIS_AM_SG','D_PARIS_DM_SG'				
+		dep.NAME in ('D_Clerical_Allowance_SG',
+                 'D_DPI_SG','D_Daily_Ad_Hoc_Before_Tax',
+                 'D_FSAD_Self_Override_SG',
+                 'D_M_BEFORE_TAX_SG',
+                 'D_Monthly_Allowance_SG',
+		             'D_NADOR_SG',
+                 'D_NLPI_SG',
+                 'D_OPI_First_Year_SG',
+                 'D_OPI_Renewal_SG',
+                 'D_PA_Production_Bonus_SG',
+                 'D_PBA_SG',
+                 'D_PBU_Buyout_SG',
+                 'D_PBU_Monthly_SG',
+		             'D_PI_UM_SG',
+----Modified by zhubin 20140911                  
+                 --'D_PI_FSD_SG',
+                 'D_PI_DM_SG',
+----Modified end                 
+                 'D_PLOR_SG',
+                 'D_PL_Year_End_Bonus',
+                 'D_Productivity_Allowance_SG',
+                 'D_SPI_SG',
+                 'D_VLOR_SG',
+                 'D_MD_Distribution_SG',
+	               'D_ADPI_SG',
+----Modified by zhubin 20140911                 
+                 --'D_AOR_SG',
+                 'D_AOR_DM_SG',
+                 'D_AOR_UM_SG',
+----Modified end                
+                 'D_PARIS_AM_SG',
+                 'D_PARIS_DM_SG'				
 		) and
 		dep.BUSINESSUNITMAP = bus.MASK and
 		bus.NAME IN ('SGPAGY') and
@@ -1496,8 +1636,10 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
     VL_CYCLE_YEAR NUMBER;
     VL_PRIOR_YEAR NUMBER;
     VL_PRIOR_MONTH NUMBER;
+    VL_LY_MONTH NUMBER;
+    VL_LY_YEAR NUMBER;
   BEGIN
-    --V_PERIODSEQ := 2533274790398893;
+    --V_PRIOR_PERIODSEQ := 2533274790398896;
     
     SELECT to_number(to_char(STARTDATE, 'MM')), 
       to_number(to_char(STARTDATE, 'YYYY'))
@@ -1505,13 +1647,25 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
     
     SELECT to_number(to_char(STARTDATE, 'MM')), 
       to_number(to_char(STARTDATE, 'YYYY'))
-      INTO VL_PRIOR_YEAR, VL_PRIOR_MONTH FROM CS_PERIOD WHERE PERIODSEQ = V_PRIOR_PERIODSEQ;
-
+      INTO VL_PRIOR_MONTH, VL_PRIOR_YEAR FROM CS_PERIOD WHERE PERIODSEQ = V_PRIOR_PERIODSEQ;
+    
+    IF VL_CYCLE_MONTH = 12 THEN
+       VL_PRIOR_MONTH := 0;
+    END IF;
+    
+    IF VL_CYCLE_MONTH = 12 THEN
+      VL_LY_YEAR := VL_CYCLE_YEAR;
+      VL_LY_MONTH := 11;
+    ELSE
+      VL_LY_YEAR := VL_CYCLE_YEAR - 1;
+      VL_LY_MONTH := 11;
+    END IF;
+       
     DELETE FROM AIA_PARIS WHERE DEC_MONTH = VL_CYCLE_MONTH AND DEC_YEAR = VL_CYCLE_YEAR;
 
 ----CURR-YTD-FYP-B4-SOC precent the ADJ_TYD_RYP
     -- STANDALONE UM
-    INSERT INTO AIA_PARIS 
+    INSERT INTO AIA_PARIS
       (DEC_MONTH,DEC_YEAR,
       TXT_DISTRICT_CODE,TXT_DISTRICT_NAME,TXT_AGENCY_CODE,TXT_AGENCY_NAME,
       TXT_LEADER_CODE,TXT_LEADER_NAME,TXT_LEADER_TITLE, DTE_AGENCY_DISSOLVED,TXT_STANDALONE_UM,
@@ -1525,13 +1679,24 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
       TXT_MIN_PER,DEC_BONUS,DEC_BONUS_PAYMENT)
       SELECT distinct 
       VL_CYCLE_MONTH, VL_CYCLE_YEAR,
-      pos.GENERICATTRIBUTE3 as distric_cd, districtpar.LASTNAME, SUBSTR(pos.NAME, -5) as agency_cd, (par.FIRSTNAME || ' ' || par.MIDDLENAME || ' ' || par.LASTNAME) as agency_name, 
+      pos.GENERICATTRIBUTE3 as distric_cd, districtpar.LASTNAME, SUBSTR(pos.NAME, -5) as agency_cd, PAR.LASTNAME,--trim((par.FIRSTNAME || ' ' || par.MIDDLENAME || ' ' || par.LASTNAME)) as agency_name, 
       pos.GENERICATTRIBUTE2 as agent_cd, pos.GENERICATTRIBUTE7 as agent_name, pos.GENERICATTRIBUTE11 as rank, par.TERMINATIONDATE as dissolved_dt, 'Y', 
       coalesce(ytdparis.DEC_CURR_YTD_FYP, 0) + coalesce(EXFYPMEA.VALUE, 0), coalesce(ytdparis.DEC_CURR_YTD_RYP,0) + coalesce(rypmea.VALUE,0) + coalesce(EXRYPMEA.value, 0), coalesce(lyparis.DEC_LY_FYP, 0), coalesce(lyparis.DEC_LY_RYP,0), 
       coalesce(ytdparis.DEC_CURR_YTD_RYP_B4_SOC,0) + coalesce(rypmea.VALUE,0), coalesce(lyparis.DEC_LY_RYP_B4_SOC,0),
-      coalesce(EXRYPMEA.value, 0), --ADJ_TYD_RYP
+----Modified by zhubin 20140912      
+      --coalesce(EXRYPMEA.value, 0), 
+      (coalesce(ytdparis.DEC_CURR_YTD_RYP,0) + coalesce(rypmea.VALUE,0) + coalesce(EXRYPMEA.value, 0)) - (coalesce(ytdparis.DEC_CURR_YTD_RYP_B4_SOC,0) + coalesce(rypmea.VALUE,0)), --ADJ_TYD_RYP
+----Modified end
       (coalesce(lyparis.DEC_LY_FYP, 0) + coalesce(lyparis.DEC_LY_RYP,0) - coalesce(lyparis.DEC_LY_RYP_B4_SOC,0)) as DEC_L_YTD_TP,
-      coalesce(permea.VALUE, 0), 
+----MODIFIED BY BIN WHEN PERSISTENCY<0 SET IT ZERO 20140918      
+      --coalesce(permea.VALUE, 0),
+      CASE
+        WHEN coalesce(permea.VALUE, 0) > 0
+          THEN coalesce(permea.VALUE, 0)
+        ELSE
+          0
+      END AS DEC_PERSISTENCY,    
+----MODIFIED END      
       CASE WHEN (coalesce(ytdparis.DEC_CURR_YTD_FYP, 0) + coalesce(EXFYPMEA.VALUE, 0)) >= fvfypparis.value THEN 'Y' ELSE 'N' END as min_fyp,
       CASE WHEN (coalesce(ytdparis.DEC_CURR_YTD_RYP_B4_SOC,0) + coalesce(rypmea.VALUE,0)) >= fvrypparis.value THEN 'Y' ELSE 'N' END as min_ryp,
       CASE WHEN coalesce(permea.VALUE, 0) >= coalesce(fvperparis.VALUE, 0) THEN 'Y' ELSE 'N' END as min_per,
@@ -1549,44 +1714,70 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
       					 AND leader.REMOVEDATE > SYSDATE
       					 AND PERIOD.ENDDATE BETWEEN leader.EFFECTIVESTARTDATE AND leader.EFFECTIVEENDDATE - 1
       LEFT  JOIN 
-      	(SELECT TXT_AGENCY_CODE,
+      	(SELECT TXT_DISTRICT_CODE,
+                TXT_AGENCY_CODE,
       		      coalesce(DEC_CURR_YTD_FYP, 0) AS DEC_CURR_YTD_FYP, 
       				  coalesce(DEC_CURR_YTD_RYP,0) as DEC_CURR_YTD_RYP,
       				  coalesce(DEC_CURR_YTD_RYP_B4_SOC,0) as DEC_CURR_YTD_RYP_B4_SOC 
       		FROM AIA_PARIS 
-      		WHERE DEC_MONTH = VL_CYCLE_MONTH - 1
-      		AND DEC_YEAR = VL_CYCLE_YEAR
-      		) ytdparis 
-      	ON substr(pos.name, -5) = ytdparis.TXT_AGENCY_CODE
+      		WHERE DEC_MONTH = VL_PRIOR_MONTH
+      		  AND DEC_YEAR = VL_PRIOR_YEAR
+      		  AND TXT_STANDALONE_UM != 'D'
+          ) ytdparis 
+      	ON  substr(pos.name, -5) = ytdparis.TXT_AGENCY_CODE
+        AND pos.GENERICATTRIBUTE3 = ytdparis.TXT_DISTRICT_CODE
       LEFT JOIN 
-      	(SELECT TXT_AGENCY_CODE,
+      	(SELECT TXT_DISTRICT_CODE,
+                TXT_AGENCY_CODE,             
       		      coalesce(DEC_CURR_YTD_FYP, 0) AS DEC_LY_FYP,
       		      coalesce(DEC_CURR_YTD_RYP,0) as DEC_LY_RYP,
       		      coalesce(DEC_CURR_YTD_RYP_B4_SOC,0) as DEC_LY_RYP_B4_SOC 
       		FROM AIA_PARIS 
-      		WHERE DEC_MONTH = 12 
-      		AND   DEC_YEAR  = VL_CYCLE_YEAR - 1) lyparis 
-        ON substr(pos.name, -5) = lyparis.TXT_AGENCY_CODE
-      LEFT JOIN CS_MEASUREMENT fypmea ON fypmea.PAYEESEQ = mea.PAYEESEQ AND fypmea.PERIODSEQ = mea.PERIODSEQ AND fypmea.NAME = 'PM_PARIS_FYP_Standalone_AM_Direct_Team'
-      LEFT JOIN CS_MEASUREMENT rypmea ON rypmea.PAYEESEQ = mea.PAYEESEQ AND rypmea.PERIODSEQ = mea.PERIODSEQ AND rypmea.NAME = 'PM_PARIS_RYP_Standalone_AM_Direct_Team'
+      		WHERE DEC_MONTH = VL_LY_MONTH
+      		AND   DEC_YEAR  = VL_LY_YEAR
+          AND   TXT_STANDALONE_UM != 'D') lyparis 
+        ON  substr(pos.name, -5) = lyparis.TXT_AGENCY_CODE
+        AND POS.GENERICATTRIBUTE3 = lyparis.TXT_DISTRICT_CODE 
+      LEFT JOIN CS_MEASUREMENT fypmea 
+        ON fypmea.PAYEESEQ = mea.PAYEESEQ 
+        AND fypmea.PERIODSEQ = V_PERIODSEQ 
+        AND fypmea.NAME = 'PM_PARIS_FYP_Standalone_AM_Direct_Team'
+      LEFT JOIN CS_MEASUREMENT rypmea 
+        ON rypmea.PAYEESEQ = mea.PAYEESEQ 
+        AND rypmea.PERIODSEQ = V_PERIODSEQ 
+        AND rypmea.NAME = 'PM_PARIS_RYP_Standalone_AM_Direct_Team'
       LEFT JOIN CS_MEASUREMENT EXFYPMEA 
       	ON  EXFYPMEA.PAYEESEQ = MEA.PAYEESEQ
-      	AND EXFYPMEA.PERIODSEQ = MEA.PERIODSEQ
+      	AND EXFYPMEA.PERIODSEQ = V_PERIODSEQ
       	AND EXFYPMEA.NAME = 'PM_PARIS_FYP_Exluding_Standalone_AM_Direct_Team' 
       LEFT JOIN CS_MEASUREMENT EXRYPMEA 
       	ON  EXRYPMEA.PAYEESEQ = MEA.PAYEESEQ 
-      	AND EXRYPMEA.PERIODSEQ = MEA.PERIODSEQ 
+      	AND EXRYPMEA.PERIODSEQ = V_PERIODSEQ
       	AND EXRYPMEA.NAME = 'PM_PARIS_RYP_Exluding_Standalone_AM_Direct_Team'
-      LEFT JOIN CS_MEASUREMENT fypmea ON fypmea.PAYEESEQ = mea.PAYEESEQ AND fypmea.PERIODSEQ = mea.PERIODSEQ AND fypmea.NAME = 'PM_PARIS_FYP_Standalone_AM_Direct_Team'
-      LEFT JOIN CS_MEASUREMENT permea ON permea.PAYEESEQ = mea.PAYEESEQ AND permea.PERIODSEQ = mea.PERIODSEQ AND permea.NAME = 'PM_Standalone_AM_PA_Persistency'
-      INNER JOIN CS_FIXEDVALUE fvfypparis ON fvfypparis.NAME = 'FV_PARIS_FYP_UM' AND fvfypparis.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN fvfypparis.EFFECTIVESTARTDATE AND fvfypparis.EFFECTIVEENDDATE
-      INNER JOIN CS_FIXEDVALUE fvrypparis ON fvrypparis.NAME = 'FV_PARIS_RYP_UM' AND fvrypparis.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN fvrypparis.EFFECTIVESTARTDATE AND fvrypparis.EFFECTIVEENDDATE
+      LEFT JOIN CS_MEASUREMENT fypmea 
+        ON fypmea.PAYEESEQ = mea.PAYEESEQ 
+        AND fypmea.PERIODSEQ = V_PERIODSEQ 
+        AND fypmea.NAME = 'PM_PARIS_FYP_Standalone_AM_Direct_Team'
+      LEFT JOIN CS_MEASUREMENT permea 
+        ON permea.PAYEESEQ = mea.PAYEESEQ 
+        AND permea.PERIODSEQ = V_PERIODSEQ 
+        AND permea.NAME = 'PM_Standalone_AM_PA_Persistency'
+      INNER JOIN CS_FIXEDVALUE fvfypparis 
+        ON fvfypparis.NAME = 'FV_PARIS_FYP_UM'
+        AND fvfypparis.REMOVEDATE > SYSDATE 
+        AND period.ENDDATE BETWEEN fvfypparis.EFFECTIVESTARTDATE AND fvfypparis.EFFECTIVEENDDATE
+      INNER JOIN CS_FIXEDVALUE fvrypparis 
+        ON fvrypparis.NAME = 'FV_PARIS_RYP_UM' 
+        AND fvrypparis.REMOVEDATE > SYSDATE 
+        AND period.ENDDATE BETWEEN fvrypparis.EFFECTIVESTARTDATE AND fvrypparis.EFFECTIVEENDDATE
       INNER JOIN CS_FIXEDVALUE fvperparis ON fvperparis.NAME = 'FV_PARIS_PERSISTENCY' AND fvperparis.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN fvperparis.EFFECTIVESTARTDATE AND fvperparis.EFFECTIVEENDDATE
-      LEFT JOIN CS_INCENTIVE incentive ON incentive.NAME = 'I_PARIS_AM_SG' AND incentive.POSITIONSEQ = leader.RULEELEMENTOWNERSEQ AND incentive.PERIODSEQ = mea.PERIODSEQ
-      --LEFT JOIN CS_DEPOSIT dep ON dep.NAME = 'D_PARIS_AM_SG' AND incentive.PAYEESEQ = mea.PAYEESEQ AND incentive.PERIODSEQ = mea.PERIODSEQ
+      LEFT JOIN CS_INCENTIVE incentive 
+        ON incentive.NAME = 'I_PARIS_AM_SG' 
+        AND incentive.POSITIONSEQ = leader.RULEELEMENTOWNERSEQ 
+        AND incentive.PERIODSEQ = V_PERIODSEQ
       WHERE ((mea.NAME = 'PM_PARIS_FYP_Standalone_AM_Direct_Team' and mea.value != 0) 
-      		  OR(mea.NAME = 'PM_PARIS_RYP_Standalone_AM_Direct_Team' and mea.value != 0))
-      AND mea.PERIODSEQ = V_PERIODSEQ;
+      		   OR(mea.NAME = 'PM_PARIS_RYP_Standalone_AM_Direct_Team' and mea.value != 0))
+        AND mea.PERIODSEQ = V_PERIODSEQ;
  
  --INSERT for PARIS Standalone UM completed
     
@@ -1599,24 +1790,14 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
       DEC_CURR_YTD_RYP_B4_SOC,DEC_LY_RYP_B4_SOC,
       DEC_CURR_YTD_FYP_B4_SOC, --ADJ_TYD_RYP
       DEC_L_YTD_TP)
-      --DEC_PERSISTENCY,
-      --TXT_MIN_RYP,
-      --TXT_MIN_FYP,
-      --TXT_MIN_PER,
-      --DEC_BONUS,DEC_BONUS_PAYMENT
       SELECT distinct
       VL_CYCLE_MONTH, VL_CYCLE_YEAR,
-      pos.GENERICATTRIBUTE3 as distric_cd, districtpar.LASTNAME, SUBSTR(pos.NAME, -5) as agency_cd, (par.FIRSTNAME || ' ' || par.MIDDLENAME || ' ' || par.LASTNAME) as agency_name, 
+      pos.GENERICATTRIBUTE3 as distric_cd, districtpar.LASTNAME, SUBSTR(pos.NAME, -5) as agency_cd, PAR.LASTNAME,--trim((par.FIRSTNAME || ' ' || par.MIDDLENAME || ' ' || par.LASTNAME)) as agency_name, 
       pos.GENERICATTRIBUTE2 as agent_cd, pos.GENERICATTRIBUTE7 as agent_name, pos.GENERICATTRIBUTE11 as rank, par.TERMINATIONDATE as dissolved_dt, 'N', --Standalone flag 
       coalesce(ytdparis.DEC_CURR_YTD_FYP,0) + coalesce(fypmea.VALUE,0), coalesce(ytdparis.DEC_CURR_YTD_RYP,0) + coalesce(rypmea.VALUE,0), coalesce(lyparis.DEC_LY_FYP,0), coalesce(lyparis.DEC_LY_RYP,0),
       0, 0,
       (coalesce(ytdparis.DEC_CURR_YTD_RYP,0) + coalesce(rypmea.VALUE,0)), --ADJ_TYD_RYP 
       (coalesce(lyparis.DEC_LY_FYP,0) + coalesce(lyparis.DEC_LY_RYP,0))  --DEC_L_YTD_TP
-      --coalesce(permea.VALUE,0), 
-      --CASE WHEN (coalesce(ytdparis.DEC_CURR_YTD_FYP,0) + coalesce(fypmea.VALUE,0)) >= rypyearmea.GENERICNUMBER1 THEN 'Y' ELSE 'N' END as min_fyp,
-      --CASE WHEN (coalesce(ytdparis.DEC_CURR_YTD_RYP,0) + coalesce(mea.VALUE,0)) >= rypyearmea.GENERICNUMBER2 THEN 'Y' ELSE 'N' END as min_ryp,
-      --CASE WHEN permea.VALUE >= fvperparis.VALUE THEN 'Y' ELSE 'N' END as min_per,
-      --incentive.GENERICNUMBER1, dep.VALUE
       FROM CS_MEASUREMENT mea
       INNER JOIN CS_PERIOD period ON period.PERIODSEQ = mea.PERIODSEQ AND period.REMOVEDATE > SYSDATE
       INNER JOIN CS_PAYEE pay ON mea.PAYEESEQ = pay.PAYEESEQ AND pay.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN pay.EFFECTIVESTARTDATE AND pay.EFFECTIVEENDDATE - 1
@@ -1625,38 +1806,47 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
       INNER JOIN CS_PAYEE districtpay ON districtpos.PAYEESEQ = districtpay.PAYEESEQ AND districtpay.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN districtpay.EFFECTIVESTARTDATE AND districtpay.EFFECTIVEENDDATE - 1
       INNER JOIN CS_PARTICIPANT districtpar ON districtpar.PAYEESEQ = districtpay.PAYEESEQ AND districtpar.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN districtpar.EFFECTIVESTARTDATE AND districtpar.EFFECTIVEENDDATE - 1
       INNER JOIN CS_PARTICIPANT par ON par.PAYEESEQ = mea.PAYEESEQ AND par.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN par.EFFECTIVESTARTDATE and par.EFFECTIVEENDDATE - 1
-      LEFT  JOIN (SELECT TXT_AGENCY_CODE,
+      LEFT  JOIN (SELECT TXT_DISTRICT_CODE,
+                         TXT_AGENCY_CODE,
       								   DEC_CURR_YTD_FYP as DEC_CURR_YTD_FYP,
       									 DEC_CURR_YTD_RYP as DEC_CURR_YTD_RYP 
       						FROM AIA_PARIS
-      						WHERE DEC_MONTH = VL_CYCLE_MONTH - 1
-      								  AND  DEC_YEAR = VL_CYCLE_YEAR ) ytdparis 
-            ON substr(pos.name, -5) = ytdparis.TXT_AGENCY_CODE
-      LEFT  JOIN (SELECT TXT_AGENCY_CODE,
+      						WHERE DEC_MONTH = VL_PRIOR_MONTH
+      					   AND  DEC_YEAR = VL_PRIOR_YEAR
+                   AND  TXT_STANDALONE_UM != 'D') ytdparis 
+        ON  substr(pos.name, -5) = ytdparis.TXT_AGENCY_CODE
+        AND POS.GENERICATTRIBUTE3 = YTDPARIS.TXT_DISTRICT_CODE
+      LEFT  JOIN (SELECT TXT_DISTRICT_CODE,
+                         TXT_AGENCY_CODE,
       	                 DEC_CURR_YTD_FYP as DEC_LY_FYP,
       	                 DEC_CURR_YTD_RYP as DEC_LY_RYP 
       	          FROM AIA_PARIS 
-      	          WHERE DEC_MONTH = 12 
-      	          AND DEC_YEAR = VL_CYCLE_YEAR -1) lyparis 
-            ON substr(pos.name, -5) = lyparis.TXT_AGENCY_CODE
-      LEFT  JOIN CS_MEASUREMENT fypmea ON fypmea.PAYEESEQ = mea.PAYEESEQ AND fypmea.PERIODSEQ = mea.PERIODSEQ AND fypmea.NAME = 'PM_PARIS_FYP_Exluding_Standalone_AM_Direct_Team'
+      	          WHERE DEC_MONTH = VL_LY_MONTH 
+      	            AND DEC_YEAR = VL_LY_YEAR
+                    AND TXT_STANDALONE_UM != 'D'
+                  ) lyparis 
+        ON  substr(pos.name, -5) = lyparis.TXT_AGENCY_CODE
+        AND POS.GENERICATTRIBUTE3 = lyparis.TXT_DISTRICT_CODE
+      LEFT  JOIN CS_MEASUREMENT fypmea 
+        ON fypmea.PAYEESEQ = mea.PAYEESEQ 
+        AND fypmea.PERIODSEQ = V_PERIODSEQ 
+        AND fypmea.NAME = 'PM_PARIS_FYP_Exluding_Standalone_AM_Direct_Team'
       LEFT  JOIN CS_MEASUREMENT rypmea
-      			ON rypmea.PAYEESEQ = mea.PAYEESEQ 
-      			AND rypmea.PERIODSEQ = mea.PERIODSEQ
-      			AND rypmea.name = 'PM_PARIS_RYP_Exluding_Standalone_AM_Direct_Team'
-      --LEFT JOIN CS_MEASUREMENT permea ON permea.PAYEESEQ = mea.PAYEESEQ AND permea.PERIODSEQ = mea.PERIODSEQ AND fypmea.NAME = 'PM_District_PA_Persistency'
-      --LEFT JOIN CS_MEASUREMENT rypyearmea ON rypyearmea.PAYEESEQ = mea.PAYEESEQ AND rypyearmea.PERIODSEQ = mea.PERIODSEQ AND rypyearmea.NAME = 'SM_DM_PARIS_RYP_YEAR_SG'
-      --INNER JOIN CS_FIXEDVALUE fvperparis ON fvperparis.NAME = 'FV_PARIS_PERSISTENCY' AND fvperparis.REMOVEDATE > SYSDATE AND period.ENDDATE BETWEEN fvperparis.EFFECTIVESTARTDATE AND fvperparis.EFFECTIVEENDDATE
-      --LEFT JOIN CS_INCENTIVE incentive ON incentive.NAryME = 'I_PARIS_DM_SG' AND incentive.PAYEESEQ = mea.PAYEESEQ AND incentive.PERIODSEQ = mea.PERIODSEQ
-      --LEFT JOIN CS_DEPOSIT dep ON dep.NAME = 'D_PARIS_DM_SG' AND incentive.PAYEESEQ = mea.PAYEESEQ AND incentive.PERIODSEQ = mea.PERIODSEQ
-      WHERE (mea.NAME = 'PM_PARIS_FYP_Exluding_Standalone_AM_Direct_Team' and mea.VALUE != 0)
-      			OR (mea.NAME = 'PM_PARIS_RYP_Exluding_Standalone_AM_Direct_Team' and mea.VALUE != 0)
-      			AND mea.PERIODSEQ = V_PERIODSEQ 
-      			AND NOT EXISTS(SELECT 1 FROM AIA_PARIS WHERE DEC_MONTH = VL_CYCLE_MONTH AND DEC_YEAR = VL_CYCLE_YEAR AND TXT_DISTRICT_CODE = pos.GENERICATTRIBUTE3 AND TXT_AGENCY_CODE = SUBSTR(pos.NAME, -5));
+        ON rypmea.PAYEESEQ = mea.PAYEESEQ 
+      	AND rypmea.PERIODSEQ = V_PERIODSEQ
+      	AND rypmea.name = 'PM_PARIS_RYP_Exluding_Standalone_AM_Direct_Team'
+      WHERE ((mea.NAME = 'PM_PARIS_FYP_Exluding_Standalone_AM_Direct_Team' and mea.VALUE != 0)
+      			OR (mea.NAME = 'PM_PARIS_RYP_Exluding_Standalone_AM_Direct_Team' and mea.VALUE != 0))
+        AND mea.PERIODSEQ = V_PERIODSEQ 
+      	AND NOT EXISTS(SELECT 1 FROM AIA_PARIS 
+                           WHERE DEC_MONTH = VL_CYCLE_MONTH 
+                           AND DEC_YEAR = VL_CYCLE_YEAR 
+                           AND TXT_DISTRICT_CODE = pos.GENERICATTRIBUTE3 
+                           AND TXT_AGENCY_CODE = SUBSTR(pos.NAME, -5));
     
-    DBMS_OUTPUT.PUT_LINE( 'INSERT for PARIS DM is completed ' );
+    --DBMS_OUTPUT.PUT_LINE( 'INSERT for PARIS DM is completed ' );
     
-    IF MOD (VL_CYCLE_MONTH, 12) >0 THEN
+  IF MOD (VL_CYCLE_MONTH, 12) >0 THEN
 	    INSERT INTO AIA_PARIS
 				    (DEC_MONTH,DEC_YEAR,
 			      TXT_DISTRICT_CODE,TXT_DISTRICT_NAME,TXT_AGENCY_CODE,TXT_AGENCY_NAME,
@@ -1670,30 +1860,44 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
 			      TXT_MIN_FYP,
 			      TXT_MIN_PER,DEC_BONUS,DEC_BONUS_PAYMENT)
 	    SELECT VL_CYCLE_MONTH,VL_CYCLE_YEAR,
-      			 TXT_DISTRICT_CODE,TXT_DISTRICT_NAME,TXT_AGENCY_CODE,TXT_AGENCY_NAME,
-      			 TXT_LEADER_CODE,TXT_LEADER_NAME,TXT_LEADER_TITLE, DTE_AGENCY_DISSOLVED,TXT_STANDALONE_UM,
-      			 DEC_CURR_YTD_FYP,DEC_CURR_YTD_RYP,DEC_LY_FYP,DEC_LY_RYP,
-      			 DEC_CURR_YTD_RYP_B4_SOC,DEC_LY_RYP_B4_SOC,
-             DEC_CURR_YTD_FYP_B4_SOC, --ADJ_TYD_RYP
-             DEC_L_YTD_TP,
-             DEC_PERSISTENCY,
-             TXT_MIN_RYP,
-             TXT_MIN_FYP,
-             TXT_MIN_PER,DEC_BONUS,DEC_BONUS_PAYMENT FROM AIA_PARIS paris
+      			 paris.TXT_DISTRICT_CODE,paris.TXT_DISTRICT_NAME,paris.TXT_AGENCY_CODE,paris.TXT_AGENCY_NAME,
+      			 paris.TXT_LEADER_CODE,paris.TXT_LEADER_NAME,paris.TXT_LEADER_TITLE, paris.DTE_AGENCY_DISSOLVED,paris.TXT_STANDALONE_UM,
+      			 paris.DEC_CURR_YTD_FYP,paris.DEC_CURR_YTD_RYP,paris.DEC_LY_FYP,paris.DEC_LY_RYP,
+      			 paris.DEC_CURR_YTD_RYP_B4_SOC,paris.DEC_LY_RYP_B4_SOC,
+             paris.DEC_CURR_YTD_FYP_B4_SOC, --ADJ_TYD_RYP
+             paris.DEC_L_YTD_TP,
+             paris.DEC_PERSISTENCY,
+             paris.TXT_MIN_RYP,
+             paris.TXT_MIN_FYP,
+             paris.TXT_MIN_PER,paris.DEC_BONUS,paris.DEC_BONUS_PAYMENT 
+      FROM AIA_PARIS paris
 	    WHERE paris.DEC_MONTH = VL_PRIOR_MONTH
 	    AND   paris.DEC_YEAR = VL_PRIOR_YEAR
-	    AND   paris.TXT_STANDALONE_UM IS NOT NULL --EXCLUDE THE SUM OF DISTRICT 
+	    AND   paris.TXT_STANDALONE_UM != 'D' --EXCLUDE THE SUM OF DISTRICT 
 	    AND   NOT EXISTS(SELECT 1 FROM AIA_PARIS 
 	    	               WHERE DEC_MONTH = VL_CYCLE_MONTH 
 	    	               AND DEC_YEAR = VL_CYCLE_YEAR 
 	    	               AND TXT_DISTRICT_CODE = paris.TXT_DISTRICT_CODE 
 	    	               AND TXT_AGENCY_CODE = paris.TXT_AGENCY_CODE);
 	  END IF;
---TODO CALCULATE THE DISTRICT
-    INSERT INTO AIA_PARIS
+
+--ADDED BY ZHUBIN 20140916    
+    --UPDATE ADJ_YTD_RYP & LYTD_TP
+    UPDATE AIA_PARIS
+           SET DEC_CURR_YTD_FYP_B4_SOC = --ADJ_TYD_RYP
+               (DEC_CURR_YTD_RYP - DEC_CURR_YTD_RYP_B4_SOC),
+               DEC_L_YTD_TP = 
+               (DEC_LY_FYP + DEC_LY_RYP - DEC_LY_RYP_B4_SOC)
+           WHERE DEC_YEAR = VL_CYCLE_YEAR
+           AND DEC_MONTH = VL_CYCLE_MONTH;
+--ADDED END
+          
+------TO CALCULATE THE DISTRICT
+    
+    INSERT INTO Aia_Paris
       (DEC_MONTH,DEC_YEAR,
       TXT_DISTRICT_CODE, TXT_DISTRICT_NAME, TXT_AGENCY_CODE, TXT_AGENCY_NAME,
-	    TXT_LEADER_CODE, TXT_LEADER_NAME,TXT_LEADER_TITLE, DTE_AGENCY_DISSOLVED,
+	    TXT_LEADER_CODE, TXT_LEADER_NAME,TXT_LEADER_TITLE, DTE_AGENCY_DISSOLVED,TXT_STANDALONE_UM,
 			DEC_CURR_YTD_FYP,
 			DEC_CURR_YTD_RYP,
 			DEC_LY_FYP,DEC_LY_RYP,
@@ -1706,27 +1910,35 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
 			TXT_MIN_FYP,
 			TXT_MIN_PER,
 			DEC_BONUS,
-			DEC_BONUS_PAYMENT)
-			SELECT VL_CYCLE_MONTH, VL_CYCLE_YEAR,
-			       TXT_DISTRICT_CODE, TXT_DISTRICT_NAME, TXT_DISTRICT_CODE, TXT_DISTRICT_NAME,
-			       POS.GENERICATTRIBUTE2, POS.GENERICATTRIBUTE7, POS.GENERICATTRIBUTE11, PAR.TERMINATIONDATE,
-						 SUM(DEC_CURR_YTD_FYP),
-						 SUM(DEC_CURR_YTD_RYP),
-						 SUM(DEC_LY_FYP),
-						 SUM(DEC_LY_RYP),
-      			 SUM(DEC_CURR_YTD_RYP_B4_SOC),
-      			 SUM(DEC_LY_RYP_B4_SOC),
-      			 SUM(DEC_CURR_YTD_FYP_B4_SOC), --ADJ_TYD_RYP
-      			 SUM(DEC_L_YTD_TP),
-      			 coalesce(permea.VALUE,0),--PERSISTENCY
+			DEC_BONUS_PAYMENT) 
+			SELECT paris.DEC_MONTH, paris.DEC_YEAR,
+			       paris.TXT_DISTRICT_CODE, paris.TXT_DISTRICT_NAME, paris.TXT_DISTRICT_CODE, paris.TXT_DISTRICT_NAME, 
+			       POS.GENERICATTRIBUTE2, POS.GENERICATTRIBUTE7, POS.GENERICATTRIBUTE11, PAR.TERMINATIONDATE,'D',
+						 SUM(paris.DEC_CURR_YTD_FYP),
+						 SUM(paris.DEC_CURR_YTD_RYP),
+						 SUM(paris.DEC_LY_FYP),
+						 SUM(paris.DEC_LY_RYP),
+      			 SUM(paris.DEC_CURR_YTD_RYP_B4_SOC),
+      			 SUM(paris.DEC_LY_RYP_B4_SOC),
+      			 SUM(paris.DEC_CURR_YTD_FYP_B4_SOC), --ADJ_TYD_RYP
+      			 SUM(paris.DEC_L_YTD_TP),
+----MODIFIED BY BIN WHEN PERSISTENCY<0 SET IT ZERO 20140918      
+             --coalesce(permea.VALUE,0),--PERSISTENCY
+             CASE
+               WHEN coalesce(permea.VALUE, 0) > 0
+                 THEN coalesce(permea.VALUE, 0)
+               ELSE
+                 0
+             END AS DEC_PERSISTENCY,    
+----MODIFIED END      			              
       			 CASE 
-      			   WHEN SUM(DEC_CURR_YTD_FYP) > coalesce(minmea.GENERICNUMBER1, 0) THEN
+      			   WHEN SUM(paris.DEC_CURR_YTD_FYP) > coalesce(minmea.GENERICNUMBER1, 0) THEN
       			 	  'Y'
       			   ELSE
       			 		'N'
       			 END,
       			 CASE 
-      			 	 WHEN SUM(DEC_CURR_YTD_RYP) > coalesce(minmea.GENERICNUMBER2, 0) THEN
+      			 	 WHEN SUM(paris.DEC_CURR_YTD_RYP) > coalesce(minmea.GENERICNUMBER2, 0) THEN
       			 	  'Y'
       			   ELSE
       			 		'N'
@@ -1747,9 +1959,12 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
 			           ON  PAR.PAYEESEQ = POS.PAYEESEQ
 			           AND PAR.REMOVEDATE> SYSDATE
 			           AND V_PERIODENDDATE BETWEEN PAR.EFFECTIVESTARTDATE AND PAR.EFFECTIVEENDDATE - 1
-			INNER JOIN CS_POSITION leader 
-								 ON leader.NAME = ('SGT' || paris.TXT_DISTRICT_CODE)
-								 AND leader.REMOVEDATE > SYSDATE 
+			INNER JOIN CS_POSITION leader
+----MODIFIED BY ZHUBIN FOR FIXING THE LEADER CODE BUG       
+								 --ON leader.NAME = ('SGT' || paris.TXT_DISTRICT_CODE)
+								 ON leader.NAME = ('SGT' || POS.GENERICATTRIBUTE2)
+----MODIFIED END          
+                 AND leader.REMOVEDATE > SYSDATE 
 								 AND V_PERIODENDDATE BETWEEN leader.EFFECTIVESTARTDATE AND leader.EFFECTIVEENDDATE - 1					 
 			LEFT  JOIN CS_MEASUREMENT permea ON permea.POSITIONSEQ = POS.RULEELEMENTOWNERSEQ 
 				         AND permea.PERIODSEQ = V_PERIODSEQ
@@ -1765,22 +1980,28 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
 		  	    AND  incentive.PERIODSEQ = V_PERIODSEQ
 			WHERE paris.DEC_YEAR = VL_CYCLE_YEAR
 			AND   paris.DEC_MONTH = VL_CYCLE_MONTH 
-			GROUP by paris.TXT_DISTRICT_CODE,
-					 paris.TXT_DISTRICT_NAME,
-				   permea.VALUE,
-					 minmea.GENERICNUMBER1,
-					 minmea.GENERICNUMBER2,		
-					 fvperparis.VALUE,
-					 incentive.GENERICNUMBER1,
-					 incentive.VALUE;
-      
+			GROUP by paris.dec_year,
+               paris.dec_month,
+               paris.TXT_DISTRICT_CODE,
+					     paris.TXT_DISTRICT_NAME,
+               POS.GENERICATTRIBUTE2, 
+               POS.GENERICATTRIBUTE7, 
+               POS.GENERICATTRIBUTE11,
+               PAR.TERMINATIONDATE,
+				       permea.VALUE,
+					     minmea.GENERICNUMBER1,
+					     minmea.GENERICNUMBER2,		
+					     fvperparis.VALUE,
+					     incentive.GENERICNUMBER1,
+					     incentive.VALUE;
+    commit;
   END;
   
 	PROCEDURE RPT_POPULATE_ALL IS BEGIN  
 		INIT;
 		------
 		RPT_CLERICAL_ALLOWANCE;
-		RPT_PA_QTR_PRD_BONUS;
+		--RPT_PA_QTR_PRD_BONUS;
 		RPT_PRD_BENEFIT_FRM_UM;
 		-- Added by Donny-20140613
 		SP_RPT_SG_NSMAN_INCOME( V_PERIODSEQ );
@@ -1791,6 +2012,26 @@ CREATE OR REPLACE PACKAGE BODY "RPT_SGP_AGY_PKG" IS
 	WHEN OTHERS THEN
 		NULL;
 	END;
+  
+  PROCEDURE RPT_POPULATE_ALL(P_PERIODSTARTDATE IN VARCHAR2) IS 
+  
+  BEGIN  
+		INIT(P_PERIODSTARTDATE);
+		------
+		RPT_CLERICAL_ALLOWANCE;
+		
+		RPT_PRD_BENEFIT_FRM_UM;
+		-- Added by Donny-20140613
+		SP_RPT_SG_NSMAN_INCOME( V_PERIODSEQ );
+		------
+    RPT_AIA_PARIS ( V_PERIODSEQ);
+    RPT_PA_QTR_PRD_BONUS;
+		COMMIT;  
+	EXCEPTION
+	WHEN OTHERS THEN
+		NULL;
+	END;
+  
 BEGIN
 	DBMS_OUTPUT.PUT_LINE( 'Init...' );
 	
